@@ -51,8 +51,8 @@ class BrowserSession:
 
 
 REQUIRED_SELECTORS = (
-    "search_input", "search_button", "result_rows", "no_results", "next_results_page", "result_first_name",
-    "result_surname", "record_first_name", "record_surname", "add_form_button",
+    "search_input", "search_button", "result_rows", "no_results", "next_results_page",
+    "record_first_name", "record_surname", "add_form_button",
     "form_root", "form_heading", "form_heading_text", "form_child_first_name", "form_child_surname",
     "submit_button", "success_indicator", "validation_error",
 )
@@ -60,5 +60,15 @@ REQUIRED_SELECTORS = (
 
 def require_selectors(selectors: dict[str, str]) -> None:
     missing = [key for key in REQUIRED_SELECTORS if not selectors.get(key) or "REPLACE_" in selectors[key]]
+    if selectors.get("result_full_name") and "REPLACE_" not in selectors["result_full_name"]:
+        if selectors.get("result_name_format") != "surname_first_patronymic":
+            missing.append("result_name_format=surname_first_patronymic")
+        for key in ("result_open", "result_action"):
+            if not selectors.get(key) or "REPLACE_" in selectors[key]:
+                missing.append(key)
+    else:
+        for key in ("result_first_name", "result_surname"):
+            if not selectors.get(key) or "REPLACE_" in selectors[key]:
+                missing.append(key)
     if missing:
         raise ConfigurationError("Inspect the live IR Center DOM and configure selectors: " + ", ".join(missing))

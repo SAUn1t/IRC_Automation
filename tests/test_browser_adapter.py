@@ -139,3 +139,41 @@ def test_form_validation_error_blocks_submission(page):
     page.locator("#form").evaluate("el => el.insertAdjacentHTML('beforeend', '<p class=validation-error>Invalid</p>')")
     with pytest.raises(VerificationError):
         IRCenter(page, SELECTORS, 200).check_validation_errors()
+
+
+def test_list_full_name_and_eighth_cell_action_are_scoped_to_exact_row(page):
+    page.set_content("""
+        <input id="search"><button id="search-button">Search</button>
+        <table class="zebra-stripe list"><tbody>
+          <tr><td>1</td><td><a href="#other">Петренко Іван Петрович</a></td>
+            <td></td><td></td><td></td><td></td><td></td>
+            <td><a class="with-icon" href="/ipr/other"><img src="/add.png"></a></td><td></td><td></td></tr>
+          <tr><td>2</td><td><a href="#record">Шевченко Іван Петрович</a></td>
+            <td></td><td></td><td></td><td></td><td></td>
+            <td><a class="with-icon" href="/ipr/expected"><img src="/page_white_text.png"></a></td><td></td><td></td></tr>
+        </tbody></table>
+        <div id="none" hidden></div><a id="next" hidden>Next</a>
+    """)
+    selectors = {**SELECTORS, "result_rows": "table.zebra-stripe.list tr:has(td)",
+                 "result_full_name": "td:nth-child(2) a", "result_name_format": "surname_first_patronymic",
+                 "result_open": "td:nth-child(2) a", "result_action": "td:nth-child(8) a.with-icon"}
+    site = IRCenter(page, selectors, 1000)
+    site.find_child(ChildName("Іван", "Шевченко"))
+    assert site.selected_ipr_href == "/ipr/expected"
+    assert page.url.endswith("#record")
+
+
+def test_list_name_that_cannot_be_parsed_stops(page):
+    page.set_content("""
+        <input id="search"><button id="search-button">Search</button>
+        <table class="zebra-stripe list"><tr><td>1</td>
+        <td><a href="#record">Шевченко Іван</a></td>
+        <td></td><td></td><td></td><td></td><td></td>
+        <td><a class="with-icon" href="/ipr/expected">IPR</a></td><td></td><td></td></tr></table>
+        <div id="none" hidden></div><a id="next" hidden>Next</a>
+    """)
+    selectors = {**SELECTORS, "result_rows": "table.zebra-stripe.list tr:has(td)",
+                 "result_full_name": "td:nth-child(2) a", "result_name_format": "surname_first_patronymic",
+                 "result_open": "td:nth-child(2) a", "result_action": "td:nth-child(8) a.with-icon"}
+    with pytest.raises(ChildIdentityMismatch):
+        IRCenter(page, selectors, 1000).find_child(ChildName("Іван", "Шевченко"))

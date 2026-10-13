@@ -4,7 +4,9 @@ Windows desktop application for processing **one child at a time**. DOCX discove
 
 ## Current status
 
-The base application is implemented. **Preview DOCX locally** works without the website and shows the selected file and number of parsed labels. The real site's selectors and the actual DOCX-to-form mapping are intentionally unconfigured because no authenticated DOM or sample template has been provided. **Process stops before browser navigation while these placeholders remain.** Do not enable submission until a real form has been mapped and tested. The app defaults to `dry_run: true` and `review_before_submit: true`.
+The base application is implemented. **Preview DOCX locally** works without the website and shows the selected file and number of parsed labels. The remaining website selectors and actual DOCX-to-form mapping are intentionally unconfigured because the full workflow DOM and template have not been provided. **Process stops before browser navigation while these placeholders remain.** Do not enable submission until a real form has been mapped and tested. The app defaults to `dry_run: true` and `review_before_submit: true`.
+
+The supplied conclusions-list HTML confirms a 10-column table: the name link is in column 2 and the IPR action is in column 8. The example config now contains selectors for that row structure. Its name parser accepts only the observed `Surname First Patronymic` format, and the action link is resolved within the exact matched row. The list also has pagination; the app still stops when more pages may contain matches. The eighth-cell link points to an IPR route, but its destination behavior has not yet been verified. Search, record, form, and submission selectors remain placeholders.
 
 ## Architecture
 

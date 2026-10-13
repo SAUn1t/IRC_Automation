@@ -12,6 +12,23 @@ class IRCenter:
         self.page = page
         self.s = selectors
         self.timeout_ms = timeout_ms
+        self.selected_ipr_href: str | None = None
+
+    def _result_identity(self, row) -> tuple[str, str]:
+        full_name_selector = self.s.get("result_full_name")
+        if full_name_selector:
+            name = row.locator(full_name_selector)
+            if name.count() != 1:
+                raise ChildIdentityMismatch("Result name is missing or ambiguous")
+            parts = normalize_space(name.inner_text()).split(" ")
+            if self.s.get("result_name_format") != "surname_first_patronymic" or len(parts) != 3:
+                raise ChildIdentityMismatch("Cannot safely parse surname, first name, and patronymic in search result")
+            return parts[1], parts[0]
+        first = row.locator(self.s["result_first_name"])
+        surname = row.locator(self.s["result_surname"])
+        if first.count() != 1 or surname.count() != 1:
+            raise ChildIdentityMismatch("Result first name or surname is missing or ambiguous")
+        return first.inner_text(), surname.inner_text()
 
     def authenticated(self) -> bool:
         try:
@@ -34,8 +51,7 @@ class IRCenter:
         matches = []
         for i in range(rows.count()):
             row = rows.nth(i)
-            first = row.locator(self.s["result_first_name"]).inner_text()
-            surname = row.locator(self.s["result_surname"]).inner_text()
+            first, surname = self._result_identity(row)
             if child.matches(first, surname):
                 matches.append(row)
         if not matches:
@@ -43,7 +59,19 @@ class IRCenter:
         if len(matches) > 1:
             details = "; ".join(normalize_space(row.inner_text())[:200] for row in matches)
             raise MultipleChildrenFound(f"{len(matches)} exact same-name records; additional identification is required. Visible records: {details}")
-        matches[0].click()
+        selected = matches[0]
+        if self.s.get("result_action"):
+            action = selected.locator(self.s["result_action"])
+            if action.count() != 1 or not action.get_attribute("href"):
+                raise ChildIdentityMismatch("The selected child's eighth-cell IPR action is missing or ambiguous")
+            self.selected_ipr_href = action.get_attribute("href")
+        if self.s.get("result_open"):
+            record = selected.locator(self.s["result_open"])
+            if record.count() != 1:
+                raise ChildIdentityMismatch("The selected child's record link is missing or ambiguous")
+            record.click()
+        else:
+            selected.click()
 
     def verify_child_identity(self, child: ChildName, *, on_form: bool = False) -> None:
         prefix = "form_child_" if on_form else "record_"

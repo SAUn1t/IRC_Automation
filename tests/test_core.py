@@ -3,9 +3,10 @@ from pathlib import Path
 import pytest
 from docx import Document
 
+from ircenter_automation.browser import require_selectors
 from ircenter_automation.documents import find_document, parse_document
 from ircenter_automation.errors import (
-    DocumentNotFound, DocumentParsingError, MultipleDocumentsFound, WorkflowError,
+    ConfigurationError, DocumentNotFound, DocumentParsingError, MultipleDocumentsFound, WorkflowError,
 )
 from ircenter_automation.mapping import FieldSpec, map_document
 from ircenter_automation.normalization import comparison_key, parse_child_name
@@ -84,3 +85,11 @@ def test_state_machine_rejects_skipped_confirmation():
     machine.advance(State.ERROR)
     with pytest.raises(ValueError):
         machine.advance(State.DOCUMENT_FOUND)
+
+
+def test_partial_real_site_selectors_cannot_start_automation():
+    import json
+
+    settings = json.loads(Path("config/settings.example.json").read_text(encoding="utf-8"))
+    with pytest.raises(ConfigurationError, match="search_input"):
+        require_selectors(settings["selectors"])
