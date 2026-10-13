@@ -37,6 +37,8 @@ On first launch, example configuration is copied to `%USERPROFILE%\.ircenter-aut
 
 If the portal shows Cloudflare “Performing security verification,” leave the app's browser open and complete the check there. After the journal appears, press **Continue after login**. The app waits for the journal and does not reload the page when you press Continue. If the check keeps looping, try setting `browser` to `chrome` or `msedge` in `%USERPROFILE%\.ircenter-automation\settings.json` and restart the app. Check whether the portal also loops in a normal browser on the same network; if it does, contact the portal's support. The app cannot complete or override the portal's security check for you.
 
+If the check works in your normal browser but keeps looping in the app browser, press **Stop** in the app. Enter the child's two-word name and click **Copy fields for normal browser**. This reads the DOCX locally, confirms the child's name, and offers copy buttons for the four exact fields. Open the matching child's **Створити ІПР** form in your normal browser, paste each value into its labeled field, and review all remaining sections before using **Сформувати документ**. The copy guide does not connect to the portal or submit anything.
+
 ## Connecting to IR Center
 
 1. For the default manual review workflow, use the supplied site selectors and four-field mapping after updating the local config as described above. Redact names and personal values before sharing any DOM excerpts. Do not share passwords, cookies, browser profiles, or full page dumps containing personal data.

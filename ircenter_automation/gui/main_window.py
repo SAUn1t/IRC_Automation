@@ -4,12 +4,13 @@ from threading import Event
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
+    QApplication, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
 from ..documents import find_document, inspect_document, parse_document
 from ..errors import WorkflowError
+from ..manual_entry import prepare_manual_entry
 from ..normalization import comparison_key, parse_child_name, resolve_two_word_name
 from ..settings import load_settings
 from ..workflow import ReviewSummary, Workflow
@@ -78,6 +79,8 @@ class MainWindow(QMainWindow):
         self.preview_button = QPushButton("Preview DOCX locally")
         self.preview_button.clicked.connect(self.preview_document)
         button_row.addWidget(self.preview_button)
+        self.manual_button = QPushButton("Copy fields for normal browser")
+        self.manual_button.clicked.connect(self.show_manual_entry)
         self.stop_button = QPushButton("Stop")
         self.stop_button.clicked.connect(self.stop)
         self.stop_button.setEnabled(False)
@@ -87,6 +90,7 @@ class MainWindow(QMainWindow):
         self.continue_button.setEnabled(False)
         button_row.addWidget(self.continue_button)
         layout.addLayout(button_row)
+        layout.addWidget(self.manual_button)
         self.summary = QLabel("No document processed")
         self.summary.setWordWrap(True)
         layout.addWidget(self.summary)
@@ -137,6 +141,39 @@ class MainWindow(QMainWindow):
         self.process_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.preview_button.setEnabled(False)
+        self.manual_button.setEnabled(False)
+
+    def show_manual_entry(self) -> None:
+        try:
+            guide = prepare_manual_entry(load_settings(self.settings_path), self.name_input.text())
+        except WorkflowError as exc:
+            self.summary.setText("Local manual guide stopped")
+            self.status_panel.append(str(exc))
+            return
+        self.summary.setText(
+            f"Manual copy guide — nothing sent or submitted\nChild: {guide.child_name}\nDOCX: {guide.document_name}"
+        )
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Copy four IPR fields")
+        layout = QVBoxLayout(dialog)
+        note = QLabel(
+            "Open the matching child's Створити ІПР form in your normal browser. "
+            "Copy each value into the named field, then review the whole form before Сформувати документ."
+        )
+        note.setWordWrap(True)
+        layout.addWidget(note)
+        for field in guide.fields:
+            layout.addWidget(QLabel(f"{field.label} — {field.portal_name}"))
+            row = QHBoxLayout()
+            value = QLineEdit(field.value)
+            value.setReadOnly(True)
+            row.addWidget(value)
+            copy = QPushButton("Copy")
+            copy.clicked.connect(lambda _checked=False, text=field.value: QApplication.clipboard().setText(text))
+            row.addWidget(copy)
+            layout.addLayout(row)
+        dialog.resize(650, 330)
+        dialog.exec()
 
     def preview_document(self) -> None:
         try:
@@ -188,6 +225,7 @@ class MainWindow(QMainWindow):
         self.status_panel.append(message)
         self.process_button.setEnabled(True)
         self.preview_button.setEnabled(True)
+        self.manual_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
@@ -197,6 +235,7 @@ class MainWindow(QMainWindow):
         self.status_panel.append(message)
         self.process_button.setEnabled(True)
         self.preview_button.setEnabled(True)
+        self.manual_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
