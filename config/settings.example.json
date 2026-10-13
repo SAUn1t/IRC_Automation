@@ -29,6 +29,7 @@
     "record_full_name": "table.zebra-stripe.list tr:has(td:first-child:text-is(\"Прізвище, ім'я, по батькові дитини\")) td:nth-child(2)",
     "record_name_format": "surname_first_patronymic",
     "add_form_button": "a.add-link.with-icon[href^='/irc/index/filling-ipr/conclusion_id/']",
+    "ipr_row_add_button": "table.zebra-stripe.list tr:has(td) td:nth-child(5) a.with-icon[href^='/irc/index/filling-ipr/ipr_id/']:has(img[src$='/add.png'])",
     "form_root": "#iprForm",
     "form_heading": "#content-wrapper .nosidebar > h1",
     "form_heading_text": "Створення індивідуальної програми розвитку учня закладу загальної середньої освіти",

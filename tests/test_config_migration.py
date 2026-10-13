@@ -47,3 +47,15 @@ def test_upgrade_preserves_custom_mapping(tmp_path: Path):
     (tmp_path / "field_mapping.json").write_text(json.dumps(mapping), encoding="utf-8")
     assert not upgrade_example_config(tmp_path, Path("config"))
     assert json.loads((tmp_path / "field_mapping.json").read_text(encoding="utf-8")) == mapping
+
+
+def test_upgrade_adds_row_create_selector_to_prior_list_config(tmp_path: Path):
+    examples = Path("config")
+    settings = json.loads((examples / "settings.example.json").read_text(encoding="utf-8"))
+    settings["selectors"].pop("ipr_row_add_button")
+    (tmp_path / "settings.json").write_text(json.dumps(settings), encoding="utf-8")
+    (tmp_path / "field_mapping.json").write_text(
+        (examples / "field_mapping.example.json").read_text(encoding="utf-8"), encoding="utf-8")
+    assert upgrade_example_config(tmp_path, examples)
+    upgraded = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
+    assert upgraded["selectors"]["ipr_row_add_button"]

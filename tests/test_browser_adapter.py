@@ -189,6 +189,7 @@ JOURNAL_SELECTORS = {
     "record_full_name": "table.zebra-stripe.list tr:has(td:first-child:text-is(\"Прізвище, ім'я, по батькові дитини\")) td:nth-child(2)",
     "record_name_format": "surname_first_patronymic",
     "add_form_button": "a.add-link.with-icon[href^='/irc/index/filling-ipr/conclusion_id/']",
+    "ipr_row_add_button": "table.zebra-stripe.list tr:has(td) td:nth-child(5) a.with-icon[href^='/irc/index/filling-ipr/ipr_id/']:has(img[src$='/add.png'])",
 }
 
 
@@ -205,7 +206,7 @@ def _journal_html(rows: str, next_href: str | None = None) -> str:
             '</tbody></table>' + next_link)
 
 
-def _route_journal(page, first: str, second: str):
+def _route_journal(page, first: str, second: str, ipr_actions: str | None = None):
     def handle(route):
         parsed = urlparse(route.request.url)
         if parsed.path == "/irc/index/conclusions-school":
@@ -213,8 +214,10 @@ def _route_journal(page, first: str, second: str):
         elif parsed.path == "/irc/index/conclusion-iprs/conclusion_id/42":
             body = ("<table class='zebra-stripe list'><tr><td>Прізвище, ім'я, по батькові дитини</td>"
                     "<td>Шевченко Іван Петрович</td></tr></table>"
-                    "<a class='add-link with-icon' href='/irc/index/filling-ipr/conclusion_id/42'>Створити ІПР</a>")
-        elif parsed.path == "/irc/index/filling-ipr/conclusion_id/42":
+                    + (ipr_actions if ipr_actions is not None else
+                       "<a class='add-link with-icon' href='/irc/index/filling-ipr/conclusion_id/42'>Створити ІПР</a>"))
+        elif parsed.path in ("/irc/index/filling-ipr/conclusion_id/42",
+                             "/irc/index/filling-ipr/ipr_id/99/conclusion_id/42"):
             body = "<form id='iprForm'></form>"
         else:
             route.abort()
@@ -236,6 +239,42 @@ def test_journal_scans_all_pages_then_opens_confirmed_ipr(page):
     site.verify_child_identity(child)
     site.open_new_form()
     assert page.url.endswith("/filling-ipr/conclusion_id/42")
+
+
+def _ipr_plus_row(ipr_id: int, conclusion_id: int = 42) -> str:
+    return ("<tr><td>date</td><td>school</td><td>period</td><td>protocol</td><td>"
+            f"<a class='with-icon' href='/irc/index/filling-ipr/ipr_id/{ipr_id}/conclusion_id/{conclusion_id}'>"
+            "<img src='/images/ico/add.png' alt='Створити IПР'></a></td><td>actions</td></tr>")
+
+
+def test_ipr_row_plus_opens_matching_form(page):
+    rows = (_ipr_plus_row(99) +
+            "<tr><td>older</td><td>school</td><td>period</td><td>protocol</td>"
+            "<td><a class='with-icon' href='/irc/index/get-ipr-file/ipr_id/98/conclusion_id/42'>"
+            "<img src='/images/ico/doc_pdf.png' alt='Завантажити IПР'></a></td><td></td></tr>")
+    actions = f"<table class='zebra-stripe list'><tbody>{rows}</tbody></table>"
+    _route_journal(page, _journal_html(_journal_row("Шевченко Іван Петрович", 42)), "", actions)
+    site = IRCenter(page, JOURNAL_SELECTORS, 1000)
+    child = ChildName("Іван", "Шевченко")
+    site.find_child(child)
+    site.verify_child_identity(child)
+    site.open_new_form()
+    assert page.url.endswith("/filling-ipr/ipr_id/99/conclusion_id/42")
+
+
+@pytest.mark.parametrize("actions", [
+    "<table class='zebra-stripe list'>" + _ipr_plus_row(99) + _ipr_plus_row(100) + "</table>",
+    "<table class='zebra-stripe list'>" + _ipr_plus_row(99, 43) + "</table>",
+    "<a class='add-link with-icon' href='/irc/index/filling-ipr/conclusion_id/42'>Створити ІПР</a>"
+    + "<table class='zebra-stripe list'>" + _ipr_plus_row(99) + "</table>",
+])
+def test_ipr_row_plus_ambiguous_or_wrong_conclusion_stops(page, actions):
+    _route_journal(page, _journal_html(_journal_row("Шевченко Іван Петрович", 42)), "", actions)
+    site = IRCenter(page, JOURNAL_SELECTORS, 1000)
+    site.find_child(ChildName("Іван", "Шевченко"))
+    with pytest.raises(FormButtonNotFound):
+        site.open_new_form()
+    assert page.url.endswith("/conclusion-iprs/conclusion_id/42")
 
 
 def test_ipr_page_identity_and_create_link_must_match(page):

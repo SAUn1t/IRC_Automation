@@ -182,15 +182,30 @@ class IRCenter:
             raise ChildIdentityMismatch("Opened page does not belong to the requested child")
 
     def open_new_form(self) -> None:
-        button = self.page.locator(self.s["add_form_button"])
-        if button.count() != 1 or not button.is_visible() or not button.is_enabled():
-            raise FormButtonNotFound("The add-form action is missing or ambiguous")
         if self.s.get("navigation_mode") == "conclusions_list":
+            top = self.page.locator(self.s["add_form_button"])
+            row = self.page.locator(self.s.get("ipr_row_add_button", "table.zebra-stripe.list tr:has(td) td:nth-child(5) a.with-icon[href^='/irc/index/filling-ipr/ipr_id/']:has(img[src$='/add.png'])"))
+            candidates = [(top.nth(i), "top") for i in range(top.count()) if top.nth(i).is_visible() and top.nth(i).is_enabled()]
+            candidates += [(row.nth(i), "row") for i in range(row.count()) if row.nth(i).is_visible() and row.nth(i).is_enabled()]
+            if len(candidates) != 1:
+                raise FormButtonNotFound("Expected exactly one visible create IPR action")
+            button, kind = candidates[0]
             expected = re.fullmatch(r"/irc/index/conclusion-iprs/conclusion_id/(\d+)", urlparse(self.page.url).path)
             href = button.get_attribute("href")
-            actual = re.fullmatch(r"/irc/index/filling-ipr/conclusion_id/(\d+)", urlparse(urljoin(self.page.url, href or "")).path)
-            if not expected or not actual or expected.group(1) != actual.group(1):
+            if not href:
+                raise FormButtonNotFound("Create IPR action has no destination")
+            target = urlparse(urljoin(self.page.url, href))
+            pattern = (r"/irc/index/filling-ipr/conclusion_id/(\d+)" if kind == "top" else
+                       r"/irc/index/filling-ipr/ipr_id/\d+/conclusion_id/(\d+)")
+            actual = re.fullmatch(pattern, target.path)
+            if (not expected or target.scheme != "https" or target.hostname != "ircenter.gov.ua" or
+                    target.port not in (None, 443) or target.username or target.password or
+                    not actual or expected.group(1) != actual.group(1)):
                 raise FormButtonNotFound("Create IPR link does not match the confirmed conclusion")
+        else:
+            button = self.page.locator(self.s["add_form_button"])
+            if button.count() != 1 or not button.is_visible() or not button.is_enabled():
+                raise FormButtonNotFound("The add-form action is missing or ambiguous")
         button.click()
 
     def verify_form_open(self, child: ChildName) -> None:
