@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>IR Center assistant pairing</title>
+<style>
+  body { font: 14px sans-serif; width: 320px; padding: 12px; }
+  input { width: 100%; box-sizing: border-box; margin: 10px 0; }
+  button { padding: 6px 12px; }
+</style>
+<body>
+  <strong>IR Center Local Assistant</strong>
+  <p>Paste the pairing code copied from the desktop app. This is needed only once.</p>
+  <input id="token" type="password" autocomplete="off" aria-label="Pairing code">
+  <button id="save">Save pairing</button>
+  <p id="message" role="status"></p>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -14,6 +14,7 @@ class Settings:
     website_url: str
     browser: str
     browser_transport: str
+    extension_token: str | None
     browser_executable: Path | None
     browser_headless: bool
     browser_profile: Path
@@ -49,10 +50,13 @@ def load_settings(path: Path) -> Settings:
         if browser not in ("chromium", "chrome", "msedge"):
             raise ValueError("browser must be chromium, chrome, or msedge")
         browser_transport = str(data.get("browser_transport", "playwright"))
-        if browser_transport not in ("playwright", "cdp"):
-            raise ValueError("browser_transport must be playwright or cdp")
-        if browser_transport == "cdp" and browser == "chromium":
-            raise ValueError("cdp browser_transport needs chrome or msedge")
+        if browser_transport not in ("playwright", "cdp", "extension"):
+            raise ValueError("browser_transport must be playwright, cdp, or extension")
+        if browser_transport in ("cdp", "extension") and browser == "chromium":
+            raise ValueError("cdp and extension browser_transport need chrome or msedge")
+        extension_token = data.get("extension_token")
+        if extension_token is not None and (not isinstance(extension_token, str) or len(extension_token) < 24):
+            raise ValueError("extension_token must be a long local pairing token or null")
         executable_value = data.get("browser_executable")
         if executable_value is not None and (not isinstance(executable_value, str) or not executable_value.strip()):
             raise ValueError("browser_executable must be a path or null")
@@ -74,7 +78,8 @@ def load_settings(path: Path) -> Settings:
         manual_review_only = data.get("manual_review_only", False)
         if type(manual_review_only) is not bool:
             raise ValueError("manual_review_only must be true or false")
-        return Settings(folder, patterns, url, browser, browser_transport, executable, headless, profile, timeout,
+        return Settings(folder, patterns, url, browser, browser_transport, extension_token,
+                        executable, headless, profile, timeout,
                         review, auto, data["dry_run"], manual_review_only, dict(data["selectors"]), mapping)
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"Invalid settings file: {exc}") from exc

@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 
 from ..documents import find_document, inspect_document, parse_document
 from ..errors import WorkflowError
+from ..extension_workflow import ExtensionWorkflow
 from ..manual_entry import prepare_manual_entry
 from ..normalization import comparison_key, parse_child_name, resolve_two_word_name
 from ..settings import load_settings
@@ -33,9 +34,15 @@ class Worker(QThread):
 
     def run(self) -> None:
         try:
-            workflow = Workflow(load_settings(self.settings_path), self.status.emit,
-                                self.authentication_needed.emit, self.review_ready.emit,
-                                self.stop_event, self.continue_event, self.submit_event)
+            settings = load_settings(self.settings_path)
+            if settings.browser_transport == "extension":
+                workflow = ExtensionWorkflow(
+                    settings, self.status.emit, self.review_ready.emit, self.stop_event,
+                )
+            else:
+                workflow = Workflow(settings, self.status.emit,
+                                    self.authentication_needed.emit, self.review_ready.emit,
+                                    self.stop_event, self.continue_event, self.submit_event)
             self.outcome.emit(workflow.run(self.name))
         except WorkflowError as exc:
             self.failed.emit(str(exc))
@@ -72,6 +79,7 @@ class MainWindow(QMainWindow):
         browser_row = QHBoxLayout()
         browser_row.addWidget(QLabel("Browser mode:"))
         self.browser_mode = QComboBox()
+        self.browser_mode.addItem("Chrome extension (existing profile)", ("chrome", "extension"))
         self.browser_mode.addItem("Chrome normal window", ("chrome", "cdp"))
         self.browser_mode.addItem("Edge normal window", ("msedge", "cdp"))
         self.browser_mode.addItem("Playwright Chromium", ("chromium", "playwright"))
@@ -80,6 +88,9 @@ class MainWindow(QMainWindow):
         self.browser_mode.currentIndexChanged.connect(self.choose_browser_mode)
         browser_row.addWidget(self.browser_mode)
         layout.addLayout(browser_row)
+        self.pair_button = QPushButton("Copy extension pairing code")
+        self.pair_button.clicked.connect(self.copy_extension_pairing_code)
+        layout.addWidget(self.pair_button)
         self.profile_label = QLabel()
         self.profile_label.setWordWrap(True)
         layout.addWidget(self.profile_label)
@@ -156,6 +167,14 @@ class MainWindow(QMainWindow):
         temp.replace(self.settings_path)
         self.refresh_settings()
 
+    def copy_extension_pairing_code(self) -> None:
+        settings = load_settings(self.settings_path)
+        if not settings.extension_token:
+            self.status_panel.append("Pairing code is missing; restart the app")
+            return
+        QApplication.clipboard().setText(settings.extension_token)
+        self.status_panel.append("Pairing code copied. Paste it into the Chrome extension popup and save.")
+
     def process(self) -> None:
         if self.worker and self.worker.isRunning():
             return
@@ -175,6 +194,7 @@ class MainWindow(QMainWindow):
         self.preview_button.setEnabled(False)
         self.manual_button.setEnabled(False)
         self.browser_mode.setEnabled(False)
+        self.pair_button.setEnabled(False)
 
     def show_manual_entry(self) -> None:
         try:
@@ -242,7 +262,10 @@ class MainWindow(QMainWindow):
         warning_text = "\n".join(summary.warnings)
         self.summary.setText(f"Child: {summary.child_name}\nDOCX: {summary.document_name}\nPopulated: {summary.populated}\nVerified: {summary.verified}\n{warning_text}")
         settings = load_settings(self.settings_path)
-        self.submit_button.setEnabled(not settings.manual_review_only and not settings.dry_run and settings.review_before_submit)
+        self.submit_button.setEnabled(
+            settings.browser_transport != "extension" and not settings.manual_review_only
+            and not settings.dry_run and settings.review_before_submit
+        )
 
     def submit(self) -> None:
         self.submit_button.setEnabled(False)
@@ -260,6 +283,7 @@ class MainWindow(QMainWindow):
         self.preview_button.setEnabled(True)
         self.manual_button.setEnabled(True)
         self.browser_mode.setEnabled(True)
+        self.pair_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
@@ -271,6 +295,7 @@ class MainWindow(QMainWindow):
         self.preview_button.setEnabled(True)
         self.manual_button.setEnabled(True)
         self.browser_mode.setEnabled(True)
+        self.pair_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
