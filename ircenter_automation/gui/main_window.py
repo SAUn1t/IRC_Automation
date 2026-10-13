@@ -4,7 +4,7 @@ from threading import Event
 
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
-    QApplication, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
+    QApplication, QComboBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -69,6 +69,17 @@ class MainWindow(QMainWindow):
         browse.clicked.connect(self.choose_folder)
         folder_row.addWidget(browse)
         layout.addLayout(folder_row)
+        browser_row = QHBoxLayout()
+        browser_row.addWidget(QLabel("Browser mode:"))
+        self.browser_mode = QComboBox()
+        self.browser_mode.addItem("Chrome normal window", ("chrome", "cdp"))
+        self.browser_mode.addItem("Edge normal window", ("msedge", "cdp"))
+        self.browser_mode.addItem("Playwright Chromium", ("chromium", "playwright"))
+        self.browser_mode.addItem("Playwright Chrome", ("chrome", "playwright"))
+        self.browser_mode.addItem("Playwright Edge", ("msedge", "playwright"))
+        self.browser_mode.currentIndexChanged.connect(self.choose_browser_mode)
+        browser_row.addWidget(self.browser_mode)
+        layout.addLayout(browser_row)
         self.profile_label = QLabel()
         self.profile_label.setWordWrap(True)
         layout.addWidget(self.profile_label)
@@ -109,7 +120,17 @@ class MainWindow(QMainWindow):
         try:
             settings = load_settings(self.settings_path)
             self.folder_label.setText(f"DOCX folder: {settings.docx_folder}")
-            self.profile_label.setText(f"Browser: {settings.browser} | local profile: {settings.browser_profile} | dry run: {settings.dry_run}")
+            mode = next(
+                (index for index in range(self.browser_mode.count())
+                 if self.browser_mode.itemData(index) == (settings.browser, settings.browser_transport)), -1
+            )
+            self.browser_mode.blockSignals(True)
+            self.browser_mode.setCurrentIndex(mode)
+            self.browser_mode.blockSignals(False)
+            self.profile_label.setText(
+                f"Browser: {settings.browser} ({settings.browser_transport}) | "
+                f"local profile: {settings.browser_profile} | dry run: {settings.dry_run}"
+            )
         except WorkflowError as exc:
             self.status_panel.append(str(exc))
 
@@ -119,6 +140,17 @@ class MainWindow(QMainWindow):
             return
         data = json.loads(self.settings_path.read_text(encoding="utf-8"))
         data["docx_folder"] = folder
+        temp = self.settings_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp.replace(self.settings_path)
+        self.refresh_settings()
+
+    def choose_browser_mode(self) -> None:
+        selection = self.browser_mode.currentData()
+        if selection is None or (self.worker and self.worker.isRunning()):
+            return
+        data = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        data["browser"], data["browser_transport"] = selection
         temp = self.settings_path.with_suffix(".tmp")
         temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         temp.replace(self.settings_path)
@@ -142,6 +174,7 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(True)
         self.preview_button.setEnabled(False)
         self.manual_button.setEnabled(False)
+        self.browser_mode.setEnabled(False)
 
     def show_manual_entry(self) -> None:
         try:
@@ -226,6 +259,7 @@ class MainWindow(QMainWindow):
         self.process_button.setEnabled(True)
         self.preview_button.setEnabled(True)
         self.manual_button.setEnabled(True)
+        self.browser_mode.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
@@ -236,6 +270,7 @@ class MainWindow(QMainWindow):
         self.process_button.setEnabled(True)
         self.preview_button.setEnabled(True)
         self.manual_button.setEnabled(True)
+        self.browser_mode.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)

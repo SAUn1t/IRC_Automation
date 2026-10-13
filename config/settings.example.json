@@ -6,7 +6,8 @@
     "{Surname}_{Name}.docx"
   ],
   "website_url": "https://ircenter.gov.ua/irc/index/conclusions-school",
-  "browser": "chromium",
+  "browser": "chrome",
+  "browser_transport": "cdp",
   "browser_executable": null,
   "browser_headless": false,
   "browser_profile": "~/.ircenter-automation/browser-profile",

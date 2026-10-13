@@ -1,7 +1,11 @@
+import os
+import shutil
+import subprocess
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
-from playwright.sync_api import BrowserContext, Page, Playwright, sync_playwright
+from playwright.sync_api import Browser, BrowserContext, Page, Playwright, sync_playwright
 
 from .errors import ConfigurationError, WorkflowError
 from .settings import Settings
@@ -13,34 +17,138 @@ class BrowserSession:
         self.playwright: Playwright | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
+        self.external_browser: Browser | None = None
+        self.browser_process: subprocess.Popen | None = None
+
+    def _browser_executable(self) -> Path:
+        if self.settings.browser_executable:
+            executable = self.settings.browser_executable
+            if executable.is_file():
+                return executable
+            raise ConfigurationError(f"Browser executable does not exist: {executable}")
+        names = ("chrome.exe", "chrome", "google-chrome", "google-chrome-stable") if self.settings.browser == "chrome" else (
+            "msedge.exe", "msedge", "microsoft-edge")
+        candidates = [Path(found) for name in names if (found := shutil.which(name))]
+        if self.settings.browser == "chrome":
+            candidates += [Path(base) / "Google/Chrome/Application/chrome.exe"
+                           for key in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")
+                           if (base := os.environ.get(key))]
+            candidates.append(Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"))
+        else:
+            candidates += [Path(base) / "Microsoft/Edge/Application/msedge.exe"
+                           for key in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA")
+                           if (base := os.environ.get(key))]
+            candidates.append(Path("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"))
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        raise ConfigurationError("Installed Chrome or Edge was not found; set browser_executable in settings.json")
+
+    def _launch_normal_browser(self, profile_root: Path) -> None:
+        assert self.playwright is not None
+        profile = profile_root / f"{self.settings.browser}-normal-window"
+        profile.mkdir(parents=True, exist_ok=True)
+        port_file = profile / "DevToolsActivePort"
+        port_file.unlink(missing_ok=True)
+        command = [
+            str(self._browser_executable()), f"--user-data-dir={profile}",
+            "--remote-debugging-address=127.0.0.1", "--remote-debugging-port=0",
+            "--no-first-run", "--no-default-browser-check",
+        ]
+        if self.settings.browser_headless:
+            command.append("--headless=new")
+        command.append(self.settings.website_url)
+        self.browser_process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.monotonic() + 20
+        port = None
+        while time.monotonic() < deadline:
+            if port_file.exists():
+                lines = port_file.read_text(encoding="utf-8").splitlines()
+                if lines and lines[0].isdigit():
+                    port = int(lines[0])
+                    break
+            if self.browser_process.poll() is not None:
+                break
+            time.sleep(0.1)
+        if port is None:
+            raise WorkflowError(
+                "Chrome/Edge did not open its local control port. Close an older app browser window "
+                "or check browser_executable, then retry."
+            )
+        self.external_browser = self.playwright.chromium.connect_over_cdp(
+            f"http://127.0.0.1:{port}", timeout=self.settings.timeout_ms
+        )
+        contexts = self.external_browser.contexts
+        if len(contexts) != 1:
+            raise WorkflowError("Expected one normal-browser profile context")
+        self.context = contexts[0]
+        page_deadline = time.monotonic() + 5
+        while time.monotonic() < page_deadline:
+            self.page = next(
+                (page for page in self.context.pages
+                 if urlparse(page.url).hostname == "ircenter.gov.ua" or page.url == self.settings.website_url), None
+            )
+            if self.page is not None:
+                break
+            time.sleep(0.1)
+        pages = self.context.pages
+        if self.page is None:
+            self.page = pages[0] if pages else self.context.new_page()
+
+    def _close_normal_browser(self) -> None:
+        if self.external_browser:
+            try:
+                self.external_browser.close()
+            except Exception:
+                pass
+            self.external_browser = None
+        if self.browser_process:
+            if self.browser_process.poll() is None:
+                self.browser_process.terminate()
+                try:
+                    self.browser_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    self.browser_process.kill()
+            self.browser_process = None
 
     def __enter__(self) -> "BrowserSession":
         self.playwright = sync_playwright().start()
         try:
             profile: Path = self.settings.browser_profile
             profile.mkdir(parents=True, exist_ok=True)
-            channel = None if self.settings.browser == "chromium" else self.settings.browser
-            self.context = self.playwright.chromium.launch_persistent_context(
-                str(profile), headless=self.settings.browser_headless, channel=channel,
-                executable_path=str(self.settings.browser_executable) if self.settings.browser_executable else None,
-                accept_downloads=False,
-            )
+            if self.settings.browser_transport == "cdp":
+                self._launch_normal_browser(profile)
+            else:
+                channel = None if self.settings.browser == "chromium" else self.settings.browser
+                self.context = self.playwright.chromium.launch_persistent_context(
+                    str(profile), headless=self.settings.browser_headless, channel=channel,
+                    executable_path=str(self.settings.browser_executable) if self.settings.browser_executable else None,
+                    accept_downloads=False,
+                )
             self.context.set_default_timeout(self.settings.timeout_ms)
-            self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
+            self.page = self.page or (self.context.pages[0] if self.context.pages else self.context.new_page())
             return self
         except Exception:
+            self._close_normal_browser()
             self.playwright.stop()
             raise
 
     def __exit__(self, *_: object) -> None:
-        if self.context:
+        if self.settings.browser_transport == "cdp":
+            self._close_normal_browser()
+        elif self.context:
             self.context.close()
         if self.playwright:
             self.playwright.stop()
 
     def open_site(self) -> Page:
         assert self.page is not None
-        self.page.goto(self.settings.website_url, wait_until="domcontentloaded")
+        current = urlparse(self.page.url)
+        already_open = self.page.url.startswith(self.settings.website_url) or (
+            current.hostname == "ircenter.gov.ua" and current.path.startswith("/cdn-cgi/")
+        )
+        if not (self.settings.browser_transport == "cdp" and already_open):
+            self.page.goto(self.settings.website_url, wait_until="domcontentloaded")
         self.verify_domain()
         return self.page
 

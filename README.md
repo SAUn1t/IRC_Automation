@@ -15,7 +15,7 @@ The conclusions journal has a 10-column table: the name link is in column 2 and 
 | `normalization.py`, `documents.py` | Exact Unicode child and filename matching; local DOCX label/value extraction from paragraphs and tables |
 | `settings.py`, `mapping.py` | Validated local settings and separate field mappings |
 | `state.py`, `workflow.py` | Ordered state transitions and stop/continue/review gates |
-| `browser.py`, `ircenter.py` | Persistent Playwright browser; site navigation, identity, form, and submission checks |
+| `browser.py`, `ircenter.py` | Browser launch or connection; site navigation, identity, form, and submission checks |
 | `form_filler.py` | Fill and read back each field, then run a full verification pass |
 | `gui/main_window.py` | PySide6 GUI and worker thread |
 
@@ -33,9 +33,9 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe app.py
 ```
 
-On first launch, example configuration is copied to `%USERPROFILE%\.ircenter-automation\settings.json` and `field_mapping.json`. An older pair of untouched placeholder configs is upgraded automatically on launch while preserving the DOCX folder and browser choices. Customized configs are left alone; in that case, copy the new `selectors`, `website_url`, and `manual_review_only` entries from `config\settings.example.json` into your local settings, and update your mapping deliberately. These files and the persistent browser profile stay outside the checkout. Choose the DOCX folder in the GUI. Chrome or Edge can be selected by setting `browser` to `chrome` or `msedge`; the default Chromium binary is installed by Playwright. `browser_executable` can point to a locally installed Chromium binary when the Playwright download is unavailable. The default `browser_headless: false` keeps manual login possible.
+On first launch, example configuration is copied to `%USERPROFILE%\.ircenter-automation\settings.json` and `field_mapping.json`. An older pair of untouched placeholder configs is upgraded automatically on launch while preserving the DOCX folder and browser choices. Customized configs are left alone; in that case, copy the new `selectors`, `website_url`, and `manual_review_only` entries from `config\settings.example.json` into your local settings, and update your mapping deliberately. These files and the persistent browser profile stay outside the checkout. Choose the DOCX folder in the GUI. The **Browser mode** selector offers **Chrome normal window** (the new default), **Edge normal window**, and the prior Playwright launch modes. Normal window mode starts installed Chrome or Edge with a separate persistent local profile and connects to its local control port. `browser_executable` can point to the installed browser if it cannot be found automatically. The default `browser_headless: false` keeps manual login possible.
 
-If the portal shows Cloudflare “Performing security verification,” leave the app's browser open and complete the check there. After the journal appears, press **Continue after login**. The app waits for the journal and does not reload the page when you press Continue. If the check keeps looping, try setting `browser` to `chrome` or `msedge` in `%USERPROFILE%\.ircenter-automation\settings.json` and restart the app. Check whether the portal also loops in a normal browser on the same network; if it does, contact the portal's support. The app cannot complete or override the portal's security check for you.
+If the portal shows Cloudflare “Performing security verification,” leave the app's browser open and complete the check there. After the journal appears, press **Continue after login**. The app waits for the journal and does not reload the page when you press Continue. If the check loops in a Playwright launch mode while your ordinary Chrome works, select **Chrome normal window** in the app. This is a separate Chrome profile, so the first run may still require manual portal login and verification. The app does not override the portal's security check. If it also loops in normal window mode, stop the run; the portal is refusing that session.
 
 If the check works in your normal browser but keeps looping in the app browser, press **Stop** in the app. Enter the child's two-word name and click **Copy fields for normal browser**. This reads the DOCX locally, confirms the child's name, and offers copy buttons for the four exact fields. Open the matching child's **Створити ІПР** form in your normal browser, paste each value into its labeled field, and review all remaining sections before using **Сформувати документ**. The copy guide does not connect to the portal or submit anything.
 
@@ -58,6 +58,7 @@ Filename patterns are deterministic and exact apart from Unicode normalization, 
 ## Safety notes
 
 - The persistent browser profile is in `~/.ircenter-automation/browser-profile`; protect it as an authenticated session. Do not commit or share it.
+- Normal window mode opens a local debugging port for the dedicated Chrome or Edge profile while the app runs. Close the app when finished; do not use this profile for unrelated browsing.
 - Status messages shown in the GUI include the child's name and DOCX filename for the user's review. Technical logs only record state names and contain no field values.
 - An ambiguous submit response is reported as **SUBMISSION NOT CONFIRMED**; inspect the website before trying again.
 - Stop requests are honored between browser actions and while waiting for manual login/review. An in-progress Playwright action may take up to the configured timeout to stop.

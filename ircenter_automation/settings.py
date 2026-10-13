@@ -13,6 +13,7 @@ class Settings:
     filename_patterns: tuple[str, ...]
     website_url: str
     browser: str
+    browser_transport: str
     browser_executable: Path | None
     browser_headless: bool
     browser_profile: Path
@@ -47,6 +48,11 @@ def load_settings(path: Path) -> Settings:
         browser = str(data["browser"])
         if browser not in ("chromium", "chrome", "msedge"):
             raise ValueError("browser must be chromium, chrome, or msedge")
+        browser_transport = str(data.get("browser_transport", "playwright"))
+        if browser_transport not in ("playwright", "cdp"):
+            raise ValueError("browser_transport must be playwright or cdp")
+        if browser_transport == "cdp" and browser == "chromium":
+            raise ValueError("cdp browser_transport needs chrome or msedge")
         executable_value = data.get("browser_executable")
         if executable_value is not None and (not isinstance(executable_value, str) or not executable_value.strip()):
             raise ValueError("browser_executable must be a path or null")
@@ -68,7 +74,7 @@ def load_settings(path: Path) -> Settings:
         manual_review_only = data.get("manual_review_only", False)
         if type(manual_review_only) is not bool:
             raise ValueError("manual_review_only must be true or false")
-        return Settings(folder, patterns, url, browser, executable, headless, profile, timeout,
+        return Settings(folder, patterns, url, browser, browser_transport, executable, headless, profile, timeout,
                         review, auto, data["dry_run"], manual_review_only, dict(data["selectors"]), mapping)
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"Invalid settings file: {exc}") from exc
