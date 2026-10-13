@@ -6,11 +6,11 @@ from typing import Callable
 
 from .browser import BrowserSession, require_selectors
 from .documents import find_document, parse_document
-from .errors import AuthenticationRequired, ChildIdentityMismatch, Stopped, SubmissionNotConfirmed
+from .errors import AuthenticationRequired, Stopped, SubmissionNotConfirmed
 from .form_filler import FormFiller
 from .ircenter import IRCenter
 from .mapping import load_mapping, map_document
-from .normalization import comparison_key, parse_child_name
+from .normalization import comparison_key, parse_child_name, resolve_two_word_name
 from .settings import Settings
 from .state import State, StateMachine
 
@@ -59,17 +59,17 @@ class Workflow:
 
     def run(self, raw_name: str) -> str:
         try:
-            child = parse_child_name(raw_name)
-            self._advance(State.INPUT_VALIDATED, f"Normalized child name: {child.display}")
-            document_path: Path = find_document(self.settings.docx_folder, child, self.settings.filename_patterns)
+            entered = parse_child_name(raw_name)
+            self._advance(State.INPUT_VALIDATED, f"Normalized name input: {entered.display}")
+            document_path: Path = find_document(self.settings.docx_folder, entered, self.settings.filename_patterns)
             self._advance(State.DOCUMENT_FOUND, f"Document found: {document_path.name}")
             require_selectors(self.settings.selectors, self.settings.manual_review_only)
             specs = load_mapping(self.settings.mapping_file)
             parsed = parse_document(document_path)
+            child = entered
             if parsed.template == "school_ipr_2026":
-                parts = parsed.fields[comparison_key("docx_child_full_name")].split(" ")
-                if len(parts) != 3 or not child.matches(parts[1], parts[0]):
-                    raise ChildIdentityMismatch("DOCX child name does not match the requested child")
+                child = resolve_two_word_name(entered, parsed.fields[comparison_key("docx_child_full_name")])
+                self.on_status(f"Confirmed child name from DOCX: {child.display}")
             fields = map_document(parsed.fields, specs)
             with BrowserSession(self.settings) as browser:
                 page = browser.open_site()

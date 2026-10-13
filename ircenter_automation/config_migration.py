@@ -39,13 +39,20 @@ def upgrade_example_config(config_dir: Path, examples_dir: Path) -> bool:
         and all(field.get("selector") == "REPLACE_AFTER_DOM_INSPECTION" for field in old_mapping["fields"])
     )
     if not old_placeholders or not old_mapping_placeholder:
-        if (selectors.get("navigation_mode") == "conclusions_list"
-                and "ipr_row_add_button" not in selectors
-                and selectors.get("add_form_button") == current_settings["selectors"]["add_form_button"]):
-            selectors["ipr_row_add_button"] = current_settings["selectors"]["ipr_row_add_button"]
+        updated = False
+        if selectors.get("navigation_mode") == "conclusions_list":
+            if ("ipr_row_add_button" not in selectors
+                    and selectors.get("add_form_button") == current_settings["selectors"]["add_form_button"]):
+                selectors["ipr_row_add_button"] = current_settings["selectors"]["ipr_row_add_button"]
+                updated = True
+            old_name_selector = "#iprForm p:has-text('прізвище, власне ім’я, по батькові (за наявності)')"
+            if selectors.get("form_child_full_name") == old_name_selector:
+                selectors["form_child_full_name"] = current_settings["selectors"]["form_child_full_name"]
+                selectors.pop("form_child_name_prefix", None)
+                updated = True
+        if updated:
             _write_json(settings_path, old_settings)
-            return True
-        return False
+        return updated
     old_settings["website_url"] = current_settings["website_url"]
     old_settings["manual_review_only"] = True
     old_settings["selectors"] = current_settings["selectors"]

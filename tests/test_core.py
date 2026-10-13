@@ -6,10 +6,13 @@ from docx import Document
 from ircenter_automation.browser import require_selectors
 from ircenter_automation.documents import find_document, inspect_document, parse_document
 from ircenter_automation.errors import (
-    ConfigurationError, DocumentNotFound, DocumentParsingError, MultipleDocumentsFound, WorkflowError,
+    ChildIdentityMismatch, ConfigurationError, DocumentNotFound, DocumentParsingError,
+    MultipleDocumentsFound, WorkflowError,
 )
 from ircenter_automation.mapping import FieldSpec, map_document
-from ircenter_automation.normalization import comparison_key, parse_child_name
+from ircenter_automation.normalization import (
+    comparison_key, labeled_school_full_name, parse_child_name, resolve_two_word_name,
+)
 from ircenter_automation.state import State, StateMachine
 
 
@@ -34,6 +37,23 @@ def test_document_discovery_stops_on_missing_or_multiple(tmp_path: Path):
     (tmp_path / "Іван Шевченко.docx").touch()
     with pytest.raises(MultipleDocumentsFound):
         find_document(tmp_path, child, patterns)
+
+
+def test_school_name_resolves_either_two_word_order_from_labeled_full_name(tmp_path: Path):
+    full_name = "Шевченко Іван Петрович"
+    for label in (
+        "прізвище, власне ім’я, по батькові(за наявності) ",
+        "прізвище, власне ім’я, по батькові (за наявності) ",
+    ):
+        assert labeled_school_full_name(label + full_name) == full_name
+    for entered in ("Шевченко Іван", "Іван Шевченко"):
+        assert resolve_two_word_name(parse_child_name(entered), full_name).display == "Іван Шевченко"
+    with pytest.raises(ChildIdentityMismatch):
+        resolve_two_word_name(parse_child_name("Іван Петренко"), full_name)
+    path = tmp_path / "Шевченко Іван.docx"
+    path.touch()
+    assert find_document(tmp_path, parse_child_name("Шевченко Іван"), ("{Surname} {Name}.docx",)) == path
+    assert find_document(tmp_path, parse_child_name("Іван Шевченко"), ("{Surname} {Name}.docx",)) == path
 
 
 def test_docx_paragraph_table_empty_and_multiline(tmp_path: Path):
@@ -72,7 +92,7 @@ def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path):
     doc = Document()
     for line in (
         "1. Період виконання з 01.09.2026 по 31.05.2027",
-        "прізвище, власне ім’я, по батькові (за наявності) Шевченко Іван Петрович",
+        "прізвище, власне ім’я, по батькові(за наявності) Шевченко Іван Петрович",
         "контактні номери телефонів батьків (інших законних представників) учня 000 000 000",
         "клас навчання 2-А", "рік навчання 2",
         "5. Створення інклюзивного освітнього середовища, зокрема:",

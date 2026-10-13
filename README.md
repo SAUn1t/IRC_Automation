@@ -49,7 +49,7 @@ The application does not guess selectors or choose among duplicate exact-name re
 
 The generic parser recognizes `Label: value` paragraphs and table rows with adjacent label/value cells. It retains empty values and line breaks within values. It recognizes visible Unicode checkbox glyphs `☑`, `☒`, `☐`; complex Word content controls require a template-specific parser. Duplicate labels and ambiguous table rows stop processing. The mapping must cover each required website field. The sample mapping is illustrative, not a claim about the real document or website.
 
-Filename patterns are deterministic and exact apart from Unicode normalization, whitespace folding, and case folding. Input currently requires two words, first name then surname; this avoids guessing which part of a multiword name is which. Only `.docx` files directly in the selected folder are searched.
+Filename patterns are deterministic and exact apart from Unicode normalization, whitespace folding, and case folding. Enter exactly two words for the child. For the supported school IPR DOCX, either first name then surname or surname then first name is accepted; the app confirms their order against the document's labeled full name before opening the portal. A patronymic is not required in the input. Only `.docx` files directly in the selected folder are searched.
 
 ## Safety notes
 

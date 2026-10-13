@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (
 
 from ..documents import find_document, inspect_document, parse_document
 from ..errors import WorkflowError
-from ..normalization import parse_child_name
+from ..normalization import comparison_key, parse_child_name, resolve_two_word_name
 from ..settings import load_settings
 from ..workflow import ReviewSummary, Workflow
 
@@ -57,8 +57,8 @@ class MainWindow(QMainWindow):
         container = QWidget()
         layout = QVBoxLayout(container)
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("First name Surname")
-        layout.addWidget(QLabel("Child first name and surname"))
+        self.name_input.setPlaceholderText("Name Surname or Surname Name")
+        layout.addWidget(QLabel("Child's first name and surname, in either order for school IPR DOCX"))
         layout.addWidget(self.name_input)
         folder_row = QHBoxLayout()
         self.folder_label = QLabel()
@@ -146,6 +146,7 @@ class MainWindow(QMainWindow):
             layout = inspect_document(path)
             parsed = parse_document(path)
             if layout.startswith("11-section school IPR"):
+                child = resolve_two_word_name(child, parsed.fields[comparison_key("docx_child_full_name")])
                 self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLayout: {layout}\nExact scalar candidates: {len(parsed.fields) - 1}")
                 self.status_panel.append("Only exact scalar fields can be transferred automatically. All remaining IPR sections need manual review.")
                 return

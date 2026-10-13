@@ -68,7 +68,7 @@ def require_selectors(selectors: dict[str, str], manual_review_only: bool = Fals
     else:
         required += ("record_first_name", "record_surname")
     if selectors.get("form_child_full_name") and "REPLACE_" not in selectors["form_child_full_name"]:
-        required += ("form_child_name_prefix", "form_child_name_format")
+        required += ("form_child_name_format",)
     else:
         required += ("form_child_first_name", "form_child_surname")
     missing = [key for key in required if not selectors.get(key) or "REPLACE_" in selectors[key]]

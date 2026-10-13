@@ -7,7 +7,7 @@ from .errors import (
     ChildIdentityMismatch, ChildNotFound, FormButtonNotFound, FormNotOpened,
     MultipleChildrenFound, SubmissionNotConfirmed, VerificationError,
 )
-from .normalization import ChildName, comparison_key, normalize_space
+from .normalization import ChildName, comparison_key, labeled_school_full_name, normalize_space
 
 
 class IRCenter:
@@ -153,13 +153,12 @@ class IRCenter:
     def verify_child_identity(self, child: ChildName, *, on_form: bool = False) -> None:
         if on_form and self.s.get("form_child_full_name"):
             name = self.page.locator(self.s["form_child_full_name"])
-            prefix = self.s.get("form_child_name_prefix", "")
-            if name.count() != 1 or not prefix or self.s.get("form_child_name_format") != "surname_first_patronymic":
+            if name.count() != 1 or self.s.get("form_child_name_format") != "surname_first_patronymic":
                 raise ChildIdentityMismatch("IPR form child name is missing or ambiguous")
-            value = normalize_space(name.inner_text())
-            if not value.startswith(prefix):
+            full_name = labeled_school_full_name(name.inner_text())
+            if full_name is None:
                 raise ChildIdentityMismatch("IPR form child name label changed")
-            first, surname = self._full_name_identity(value[len(prefix):])
+            first, surname = self._full_name_identity(full_name)
             if not child.matches(first, surname):
                 raise ChildIdentityMismatch("IPR form does not belong to the requested child")
             return

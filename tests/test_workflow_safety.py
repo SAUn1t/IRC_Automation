@@ -113,3 +113,58 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
     assert handoff.run("Іван Шевченко").startswith("MANUAL REVIEW ENDED")
     assert handoff.machine.current is State.MANUAL_REVIEW
     assert counts["submit"] == 0
+
+
+def test_school_ipr_surname_first_input_reaches_journal_in_canonical_order(tmp_path: Path, monkeypatch):
+    docx_dir = tmp_path / "docs"
+    docx_dir.mkdir()
+    doc = Document()
+    for text in (
+        "1. Період виконання з 01.09.2026 по 31.05.2027",
+        "прізвище, власне ім’я, по батькові(за наявності) Шевченко Іван Петрович",
+        "контактні номери телефонів батьків (інших законних представників) учня 000 000 000",
+        "клас навчання 2-А", "рік навчання 2",
+        "5. Створення інклюзивного освітнього середовища, зокрема:",
+        "11. Погодження індивідуальної програми розвитку з батьками",
+    ):
+        doc.add_paragraph(text)
+    doc.save(docx_dir / "Шевченко Іван.docx")
+    settings_data = json.loads(Path("config/settings.example.json").read_text(encoding="utf-8"))
+    settings_data.update(docx_folder=str(docx_dir), mapping_file=str(Path("config/field_mapping.example.json").resolve()))
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings_data), encoding="utf-8")
+
+    class FakeBrowser:
+        def __init__(self, settings):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def open_site(self):
+            return object()
+
+    observed = []
+
+    class FakeSite:
+        def __init__(self, *_):
+            pass
+
+        def authenticated(self):
+            return True
+
+        def find_child(self, child):
+            observed.append(child.display)
+            raise Stopped("Test stops before portal interaction")
+
+    monkeypatch.setattr(workflow_module, "BrowserSession", FakeBrowser)
+    monkeypatch.setattr(workflow_module, "IRCenter", FakeSite)
+    monkeypatch.setattr(workflow_module, "require_selectors", lambda *_: None)
+    worker = Workflow(load_settings(settings_path), lambda _: None, lambda: None, lambda _: None,
+                      Event(), Event(), Event())
+    with pytest.raises(Stopped):
+        worker.run("Шевченко Іван")
+    assert observed == ["Іван Шевченко"]

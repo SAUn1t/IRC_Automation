@@ -292,11 +292,14 @@ def test_ipr_page_identity_and_create_link_must_match(page):
         site.open_new_form()
 
 
-def test_ipr_form_identity_parses_labeled_full_name(page):
-    page.set_content("<form id='iprForm'><p>прізвище, власне ім’я, по батькові (за наявності) Шевченко Іван Петрович</p></form>")
+@pytest.mark.parametrize("separator", ["", " "])
+def test_ipr_form_identity_parses_labeled_full_name(page, separator):
+    page.set_content(
+        f"<form id='iprForm'><p>прізвище, власне ім’я, по батькові{separator}(за наявності) "
+        "Шевченко Іван Петрович</p></form>"
+    )
     selectors = {**JOURNAL_SELECTORS,
-                 "form_child_full_name": "#iprForm p:has-text('прізвище, власне ім’я, по батькові (за наявності)')",
-                 "form_child_name_prefix": "прізвище, власне ім’я, по батькові (за наявності)",
+                 "form_child_full_name": "#iprForm p:has-text('прізвище, власне ім’я, по батькові')",
                  "form_child_name_format": "surname_first_patronymic"}
     IRCenter(page, selectors, 1000).verify_child_identity(ChildName("Іван", "Шевченко"), on_form=True)
     with pytest.raises(ChildIdentityMismatch):

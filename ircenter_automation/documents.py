@@ -9,13 +9,15 @@ from docx.text.paragraph import Paragraph
 from zipfile import BadZipFile
 
 from .errors import DocumentNotFound, DocumentParsingError, MultipleDocumentsFound
-from .normalization import ChildName, comparison_key, normalize_space
+from .normalization import ChildName, comparison_key, labeled_school_full_name, normalize_space
 
 
 def find_document(folder: Path, child: ChildName, patterns: tuple[str, ...]) -> Path:
     if not folder.is_dir():
         raise DocumentNotFound("Configured DOCX folder does not exist")
-    names = {comparison_key(p.format(Name=child.first, Surname=child.surname)) for p in patterns}
+    names = {comparison_key(pattern.format(Name=first, Surname=surname))
+             for pattern in patterns
+             for first, surname in ((child.first, child.surname), (child.surname, child.first))}
     matches = sorted((p for p in folder.iterdir() if p.is_file() and p.suffix.casefold() == ".docx" and comparison_key(p.name) in names), key=lambda p: p.name)
     if not matches:
         raise DocumentNotFound("No exact DOCX filename match")
@@ -58,9 +60,7 @@ def _parse_school_ipr_2026(doc) -> ParsedDocument:
         if len(matches) != 1 or not matches[0]:
             raise DocumentParsingError(f"Required school IPR field is missing or ambiguous: {key}")
         fields[comparison_key(key)] = matches[0]
-    name_prefix = "прізвище, власне ім’я, по батькові (за наявності) "
-    names = [value[len(name_prefix):].strip() for value in paragraphs if value.startswith(name_prefix)]
-    child_names = [name for name in names if len(name.split()) == 3]
+    child_names = [name for value in paragraphs if (name := labeled_school_full_name(value)) is not None]
     if len(child_names) != 1:
         raise DocumentParsingError("School IPR child name is missing or ambiguous")
     fields[comparison_key("docx_child_full_name")] = child_names[0]

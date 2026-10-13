@@ -59,3 +59,22 @@ def test_upgrade_adds_row_create_selector_to_prior_list_config(tmp_path: Path):
     assert upgrade_example_config(tmp_path, examples)
     upgraded = json.loads((tmp_path / "settings.json").read_text(encoding="utf-8"))
     assert upgraded["selectors"]["ipr_row_add_button"]
+
+
+def test_upgrade_broadens_only_known_old_school_name_selector(tmp_path: Path):
+    examples = Path("config")
+    settings = json.loads((examples / "settings.example.json").read_text(encoding="utf-8"))
+    settings["selectors"]["form_child_full_name"] = (
+        "#iprForm p:has-text('прізвище, власне ім’я, по батькові (за наявності)')"
+    )
+    settings["selectors"]["form_child_name_prefix"] = "прізвище, власне ім’я, по батькові (за наявності)"
+    settings_path = tmp_path / "settings.json"
+    settings_path.write_text(json.dumps(settings), encoding="utf-8")
+    (tmp_path / "field_mapping.json").write_text(
+        (examples / "field_mapping.example.json").read_text(encoding="utf-8"), encoding="utf-8")
+    assert upgrade_example_config(tmp_path, examples)
+    upgraded = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert upgraded["selectors"]["form_child_full_name"] == json.loads(
+        (examples / "settings.example.json").read_text(encoding="utf-8"))["selectors"]["form_child_full_name"]
+    assert "form_child_name_prefix" not in upgraded["selectors"]
+    assert not upgrade_example_config(tmp_path, examples)
