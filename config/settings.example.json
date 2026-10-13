@@ -1,0 +1,38 @@
+{
+  "docx_folder": "~/Documents/IRCenter",
+  "filename_patterns": [
+    "{Surname} {Name}.docx",
+    "{Name} {Surname}.docx",
+    "{Surname}_{Name}.docx"
+  ],
+  "website_url": "https://ircenter.gov.ua/",
+  "browser": "chromium",
+  "browser_executable": null,
+  "browser_headless": false,
+  "browser_profile": "~/.ircenter-automation/browser-profile",
+  "timeout_ms": 10000,
+  "review_before_submit": true,
+  "auto_submit": false,
+  "dry_run": true,
+  "mapping_file": "field_mapping.json",
+  "selectors": {
+    "search_input": "REPLACE_AFTER_DOM_INSPECTION",
+    "search_button": "REPLACE_AFTER_DOM_INSPECTION",
+    "result_rows": "REPLACE_AFTER_DOM_INSPECTION",
+    "no_results": "REPLACE_AFTER_DOM_INSPECTION",
+    "next_results_page": "REPLACE_AFTER_DOM_INSPECTION",
+    "result_first_name": "REPLACE_AFTER_DOM_INSPECTION",
+    "result_surname": "REPLACE_AFTER_DOM_INSPECTION",
+    "record_first_name": "REPLACE_AFTER_DOM_INSPECTION",
+    "record_surname": "REPLACE_AFTER_DOM_INSPECTION",
+    "add_form_button": "REPLACE_AFTER_DOM_INSPECTION",
+    "form_root": "REPLACE_AFTER_DOM_INSPECTION",
+    "form_heading": "REPLACE_AFTER_DOM_INSPECTION",
+    "form_heading_text": "REPLACE_AFTER_DOM_INSPECTION",
+    "form_child_first_name": "REPLACE_AFTER_DOM_INSPECTION",
+    "form_child_surname": "REPLACE_AFTER_DOM_INSPECTION",
+    "submit_button": "REPLACE_AFTER_DOM_INSPECTION",
+    "success_indicator": "REPLACE_AFTER_DOM_INSPECTION",
+    "validation_error": "REPLACE_AFTER_DOM_INSPECTION"
+  }
+}

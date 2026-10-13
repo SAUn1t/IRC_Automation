@@ -1,0 +1,12 @@
+.venv/
+.cache/
+__pycache__/
+.pytest_cache/
+*.py[cod]
+dist/
+build/
+*.spec
+browser-profile/
+logs/
+config/settings.json
+config/field_mapping.json

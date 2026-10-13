@@ -1,0 +1,18 @@
+{
+  "fields": [
+    {
+      "key": "date_of_birth",
+      "docx_label": "Дата народження",
+      "selector": "REPLACE_AFTER_DOM_INSPECTION",
+      "control": "date",
+      "required": true
+    },
+    {
+      "key": "notes",
+      "docx_label": "Примітки",
+      "selector": "REPLACE_AFTER_DOM_INSPECTION",
+      "control": "textarea",
+      "required": false
+    }
+  ]
+}
