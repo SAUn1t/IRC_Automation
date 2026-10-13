@@ -20,7 +20,7 @@ if errorlevel 1 goto packages_failed
 
 echo Installing Chromium for Playwright...
 ".venv\Scripts\python.exe" -m playwright install chromium
-if errorlevel 1 goto browser_failed
+if errorlevel 1 echo Chromium download failed. Local DOCX preview still works; configure Edge or retry the browser download before website automation.
 
 echo.
 echo Setup complete. Run run_windows.cmd to open the application.
@@ -41,10 +41,6 @@ goto failed
 
 :packages_failed
 echo Python package installation failed.
-goto failed
-
-:browser_failed
-echo Chromium installation failed. Check the download error above.
 goto failed
 
 :failed
