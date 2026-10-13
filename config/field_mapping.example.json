@@ -1,18 +1,36 @@
 {
   "fields": [
     {
-      "key": "date_of_birth",
-      "docx_label": "Дата народження",
-      "selector": "REPLACE_AFTER_DOM_INSPECTION",
-      "control": "date",
+      "key": "execution_period",
+      "docx_label": "execution_period",
+      "selector": "#iprForm input[name='execution_period']",
+      "control": "text",
       "required": true
     },
     {
-      "key": "notes",
-      "docx_label": "Примітки",
-      "selector": "REPLACE_AFTER_DOM_INSPECTION",
-      "control": "textarea",
-      "required": false
+      "key": "year_of_study",
+      "docx_label": "year_of_study",
+      "selector": "#iprForm select[name='year_of_study']",
+      "control": "select",
+      "required": true,
+      "options": {
+        "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6",
+        "7": "7", "8": "8", "9": "9", "10": "10", "11": "11", "12": "12"
+      }
+    },
+    {
+      "key": "child_grade",
+      "docx_label": "child_grade",
+      "selector": "#iprForm input[name='child_grade']",
+      "control": "text",
+      "required": true
+    },
+    {
+      "key": "parents_phones",
+      "docx_label": "parents_phones",
+      "selector": "#iprForm input[name='parents_phones']",
+      "control": "text",
+      "required": true
     }
   ]
 }

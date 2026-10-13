@@ -50,16 +50,30 @@ class BrowserSession:
             raise WorkflowError("Browser is outside the configured IR Center domain; stopped")
 
 
-REQUIRED_SELECTORS = (
-    "search_input", "search_button", "result_rows", "no_results", "next_results_page",
-    "record_first_name", "record_surname", "add_form_button",
-    "form_root", "form_heading", "form_heading_text", "form_child_first_name", "form_child_surname",
-    "submit_button", "success_indicator", "validation_error",
+COMMON_SELECTORS = (
+    "result_rows", "next_results_page", "add_form_button",
+    "form_root", "form_heading", "form_heading_text", "submit_button",
 )
 
 
-def require_selectors(selectors: dict[str, str]) -> None:
-    missing = [key for key in REQUIRED_SELECTORS if not selectors.get(key) or "REPLACE_" in selectors[key]]
+def require_selectors(selectors: dict[str, str], manual_review_only: bool = False) -> None:
+    list_mode = selectors.get("navigation_mode") == "conclusions_list"
+    required = COMMON_SELECTORS + (("auth_indicator", "list_table") if list_mode else
+                                   ("search_input", "search_button", "no_results"))
+    if not manual_review_only:
+        required += ("success_indicator", "validation_error")
+    if selectors.get("record_full_name") and "REPLACE_" not in selectors["record_full_name"]:
+        if selectors.get("record_name_format") != "surname_first_patronymic":
+            required += ("record_name_format",)
+    else:
+        required += ("record_first_name", "record_surname")
+    if selectors.get("form_child_full_name") and "REPLACE_" not in selectors["form_child_full_name"]:
+        required += ("form_child_name_prefix", "form_child_name_format")
+    else:
+        required += ("form_child_first_name", "form_child_surname")
+    missing = [key for key in required if not selectors.get(key) or "REPLACE_" in selectors[key]]
+    if selectors.get("form_child_full_name") and selectors.get("form_child_name_format") != "surname_first_patronymic":
+        missing.append("form_child_name_format=surname_first_patronymic")
     if selectors.get("result_full_name") and "REPLACE_" not in selectors["result_full_name"]:
         if selectors.get("result_name_format") != "surname_first_patronymic":
             missing.append("result_name_format=surname_first_patronymic")

@@ -6,11 +6,11 @@ from typing import Callable
 
 from .browser import BrowserSession, require_selectors
 from .documents import find_document, parse_document
-from .errors import AuthenticationRequired, Stopped, SubmissionNotConfirmed
+from .errors import AuthenticationRequired, ChildIdentityMismatch, Stopped, SubmissionNotConfirmed
 from .form_filler import FormFiller
 from .ircenter import IRCenter
 from .mapping import load_mapping, map_document
-from .normalization import parse_child_name
+from .normalization import comparison_key, parse_child_name
 from .settings import Settings
 from .state import State, StateMachine
 
@@ -63,8 +63,14 @@ class Workflow:
             self._advance(State.INPUT_VALIDATED, f"Normalized child name: {child.display}")
             document_path: Path = find_document(self.settings.docx_folder, child, self.settings.filename_patterns)
             self._advance(State.DOCUMENT_FOUND, f"Document found: {document_path.name}")
-            require_selectors(self.settings.selectors)
+            require_selectors(self.settings.selectors, self.settings.manual_review_only)
             specs = load_mapping(self.settings.mapping_file)
+            parsed = parse_document(document_path)
+            if parsed.template == "school_ipr_2026":
+                parts = parsed.fields[comparison_key("docx_child_full_name")].split(" ")
+                if len(parts) != 3 or not child.matches(parts[1], parts[0]):
+                    raise ChildIdentityMismatch("DOCX child name does not match the requested child")
+            fields = map_document(parsed.fields, specs)
             with BrowserSession(self.settings) as browser:
                 page = browser.open_site()
                 self._advance(State.BROWSER_READY, "IR Center opened")
@@ -73,9 +79,10 @@ class Workflow:
                     self.on_authentication()
                     self._wait(self.continue_event)
                     browser.verify_domain()
+                    browser.open_site()
                     if not site.authenticated():
                         raise AuthenticationRequired("Sign in manually and press Continue after login")
-                self._advance(State.AUTHENTICATED, "Search interface confirmed")
+                self._advance(State.AUTHENTICATED, "Conclusions journal confirmed")
                 site.find_child(child)
                 self._advance(State.CHILD_FOUND, "Exact child match found")
                 browser.verify_domain()
@@ -86,8 +93,6 @@ class Workflow:
                 browser.verify_domain()
                 site.verify_form_open(child)
                 self._advance(State.FORM_OPEN_CONFIRMED, "Form opened and confirmed")
-                parsed = parse_document(document_path)
-                fields = map_document(parsed.fields, specs)
                 self._advance(State.DOCUMENT_PARSED, f"{len(fields)} mapped DOCX fields parsed locally")
                 filler = FormFiller(page)
                 for index, field in enumerate(fields, 1):
@@ -96,10 +101,17 @@ class Workflow:
                     self.on_status(f"Fields filled and read back: {index}/{len(fields)}")
                 self._advance(State.FORM_POPULATED, "All mapped fields populated")
                 verification = filler.verify_all(fields)
-                site.check_validation_errors()
+                if not self.settings.manual_review_only:
+                    site.check_validation_errors()
                 self._advance(State.FORM_VERIFIED, f"Full verification passed: {len(verification)}/{len(fields)}")
                 site.verify_child_identity(child, on_form=True)
-                summary = ReviewSummary(child.display, document_path.name, len(fields), len(verification), ())
+                warnings = ("Only exact scalar fields were transferred. Complete and review all remaining IPR sections manually.",) if self.settings.manual_review_only else ()
+                summary = ReviewSummary(child.display, document_path.name, len(fields), len(verification), warnings)
+                if self.settings.manual_review_only:
+                    self._advance(State.MANUAL_REVIEW, "Partial transfer verified. Complete and review all remaining sections in the browser. Press Stop when finished.")
+                    self.on_review(summary)
+                    self.stop_event.wait()
+                    return "MANUAL REVIEW ENDED — submission status was not checked by the app"
                 self._advance(State.READY_TO_SUBMIT, "Ready to submit" if not self.settings.dry_run else "Dry run verified; no submission")
                 self.on_review(summary)
                 if self.settings.dry_run:

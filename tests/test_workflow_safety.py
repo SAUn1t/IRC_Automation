@@ -82,11 +82,12 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
     monkeypatch.setattr(workflow_module, "BrowserSession", FakeBrowser)
     monkeypatch.setattr(workflow_module, "IRCenter", FakeSite)
     monkeypatch.setattr(workflow_module, "FormFiller", FakeFiller)
-    monkeypatch.setattr(workflow_module, "require_selectors", lambda selectors: None)
+    monkeypatch.setattr(workflow_module, "require_selectors", lambda selectors, manual_review_only=False: None)
 
-    def settings(dry_run: bool):
+    def settings(dry_run: bool, manual_review_only: bool = False):
         data = json.loads(Path("config/settings.example.json").read_text(encoding="utf-8"))
-        data.update(docx_folder=str(docx_dir), mapping_file=str(mapping_path), dry_run=dry_run)
+        data.update(docx_folder=str(docx_dir), mapping_file=str(mapping_path), dry_run=dry_run,
+                    manual_review_only=manual_review_only)
         path = tmp_path / "settings.json"
         path.write_text(json.dumps(data), encoding="utf-8")
         return load_settings(path)
@@ -104,4 +105,11 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
     with pytest.raises(Stopped):
         manual.run("Іван Шевченко")
     assert manual.machine.current is State.ERROR
+    assert counts["submit"] == 0
+
+    handoff_stop = Event()
+    handoff = Workflow(settings(True, manual_review_only=True), statuses.append, lambda: None,
+                       lambda summary: handoff_stop.set(), handoff_stop, Event(), Event())
+    assert handoff.run("Іван Шевченко").startswith("MANUAL REVIEW ENDED")
+    assert handoff.machine.current is State.MANUAL_REVIEW
     assert counts["submit"] == 0

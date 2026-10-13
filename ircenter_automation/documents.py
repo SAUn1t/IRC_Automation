@@ -28,6 +28,45 @@ def find_document(folder: Path, child: ChildName, patterns: tuple[str, ...]) -> 
 class ParsedDocument:
     fields: dict[str, str]
     headings: tuple[str, ...]
+    template: str = "generic"
+
+
+def inspect_document(path: Path) -> str:
+    """Return a local, value-free description of the document layout."""
+    try:
+        doc = Document(path)
+    except (OSError, ValueError, KeyError, TypeError, BadZipFile, PackageNotFoundError) as exc:
+        raise DocumentParsingError("Cannot read or parse the DOCX") from exc
+    paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
+    if (any(p.startswith("5. Створення інклюзивного освітнього середовища") for p in paragraphs)
+            and any(p.startswith("11. Погодження індивідуальної програми розвитку") for p in paragraphs)):
+        return "11-section school IPR; portal form uses a different 13-section layout"
+    return "generic label/value DOCX"
+
+
+def _parse_school_ipr_2026(doc) -> ParsedDocument:
+    paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
+    labels = {
+        "execution_period": "1. Період виконання ",
+        "child_grade": "клас навчання ",
+        "year_of_study": "рік навчання ",
+        "parents_phones": "контактні номери телефонів батьків (інших законних представників) учня ",
+    }
+    fields: dict[str, str] = {}
+    for key, prefix in labels.items():
+        matches = [value[len(prefix):].strip() for value in paragraphs if value.startswith(prefix)]
+        if len(matches) != 1 or not matches[0]:
+            raise DocumentParsingError(f"Required school IPR field is missing or ambiguous: {key}")
+        fields[comparison_key(key)] = matches[0]
+    name_prefix = "прізвище, власне ім’я, по батькові (за наявності) "
+    names = [value[len(name_prefix):].strip() for value in paragraphs if value.startswith(name_prefix)]
+    child_names = [name for name in names if len(name.split()) == 3]
+    if len(child_names) != 1:
+        raise DocumentParsingError("School IPR child name is missing or ambiguous")
+    fields[comparison_key("docx_child_full_name")] = child_names[0]
+    if not fields[comparison_key("year_of_study")].isdigit() or not 1 <= int(fields[comparison_key("year_of_study")]) <= 12:
+        raise DocumentParsingError("School IPR year of study is invalid")
+    return ParsedDocument(fields, (), "school_ipr_2026")
 
 
 _PAIR = re.compile(r"^\s*([^:\n]{1,120})\s*:\s*(.*)$", re.DOTALL)
@@ -49,6 +88,8 @@ def _add(fields: dict[str, str], label: str, value: str) -> None:
 
 def parse_document(path: Path) -> ParsedDocument:
     try:
+        if inspect_document(path).startswith("11-section school IPR"):
+            return _parse_school_ipr_2026(Document(path))
         doc = Document(path)
         fields: dict[str, str] = {}
         headings: list[str] = []

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
     QTextEdit, QVBoxLayout, QWidget,
 )
 
-from ..documents import find_document, parse_document
+from ..documents import find_document, inspect_document, parse_document
 from ..errors import WorkflowError
 from ..normalization import parse_child_name
 from ..settings import load_settings
@@ -143,7 +143,12 @@ class MainWindow(QMainWindow):
             settings = load_settings(self.settings_path)
             child = parse_child_name(self.name_input.text())
             path = find_document(settings.docx_folder, child, settings.filename_patterns)
+            layout = inspect_document(path)
             parsed = parse_document(path)
+            if layout.startswith("11-section school IPR"):
+                self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLayout: {layout}\nExact scalar candidates: {len(parsed.fields) - 1}")
+                self.status_panel.append("Only exact scalar fields can be transferred automatically. All remaining IPR sections need manual review.")
+                return
             self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLabels parsed: {len(parsed.fields)}")
             self.status_panel.append("DOCX parsed locally. Configure real site selectors and field mapping before Process can fill a form.")
         except WorkflowError as exc:
@@ -160,9 +165,10 @@ class MainWindow(QMainWindow):
             self.worker.continue_event.set()
 
     def review_ready(self, summary: ReviewSummary) -> None:
-        self.summary.setText(f"Child: {summary.child_name}\nDOCX: {summary.document_name}\nPopulated: {summary.populated}\nVerified: {summary.verified}\nWarnings: {len(summary.warnings)}")
+        warning_text = "\n".join(summary.warnings)
+        self.summary.setText(f"Child: {summary.child_name}\nDOCX: {summary.document_name}\nPopulated: {summary.populated}\nVerified: {summary.verified}\n{warning_text}")
         settings = load_settings(self.settings_path)
-        self.submit_button.setEnabled(not settings.dry_run and settings.review_before_submit)
+        self.submit_button.setEnabled(not settings.manual_review_only and not settings.dry_run and settings.review_before_submit)
 
     def submit(self) -> None:
         self.submit_button.setEnabled(False)

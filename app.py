@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication
 
+from ircenter_automation.config_migration import upgrade_example_config
 from ircenter_automation.gui.main_window import MainWindow
 
 
@@ -15,6 +16,7 @@ def main() -> int:
         target = config_dir / f"{name}.json"
         if not target.exists():
             shutil.copyfile(examples / f"{name}.example.json", target)
+    upgrade_example_config(config_dir, examples)
     app = QApplication(sys.argv)
     window = MainWindow(config_dir / "settings.json")
     window.show()

@@ -20,6 +20,7 @@ class Settings:
     review_before_submit: bool
     auto_submit: bool
     dry_run: bool
+    manual_review_only: bool
     selectors: dict[str, str]
     mapping_file: Path
 
@@ -64,6 +65,10 @@ def load_settings(path: Path) -> Settings:
             raise ValueError("Choose either review_before_submit or auto_submit")
         if not review and not auto and not data["dry_run"]:
             raise ValueError("Enable review_before_submit, auto_submit, or dry_run")
-        return Settings(folder, patterns, url, browser, executable, headless, profile, timeout, review, auto, data["dry_run"], dict(data["selectors"]), mapping)
+        manual_review_only = data.get("manual_review_only", False)
+        if type(manual_review_only) is not bool:
+            raise ValueError("manual_review_only must be true or false")
+        return Settings(folder, patterns, url, browser, executable, headless, profile, timeout,
+                        review, auto, data["dry_run"], manual_review_only, dict(data["selectors"]), mapping)
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"Invalid settings file: {exc}") from exc
