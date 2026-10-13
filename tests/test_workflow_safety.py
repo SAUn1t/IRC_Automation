@@ -23,7 +23,7 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
         "key": "birth", "docx_label": "Дата народження", "selector": "#birth", "control": "date"
     }]}), encoding="utf-8")
 
-    counts = {"submit": 0}
+    counts = {"submit": 0, "open_site": 0, "auth_checks": 0}
 
     class FakeBrowser:
         def __init__(self, settings):
@@ -36,6 +36,7 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
             pass
 
         def open_site(self):
+            counts["open_site"] += 1
             return object()
 
         def verify_domain(self):
@@ -46,7 +47,8 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
             pass
 
         def authenticated(self):
-            return True
+            counts["auth_checks"] += 1
+            return counts["auth_checks"] > 2
 
         def find_child(self, child):
             pass
@@ -93,11 +95,20 @@ def test_dry_run_and_manual_review_never_submit_without_click(tmp_path: Path, mo
         return load_settings(path)
 
     statuses = []
-    dry = Workflow(settings(True), statuses.append, lambda: None, lambda summary: None,
-                   Event(), Event(), Event())
+    continue_event = Event()
+    prompts = []
+    def continue_after_journal():
+        prompts.append(True)
+        continue_event.set()
+
+    dry = Workflow(settings(True), statuses.append, continue_after_journal, lambda summary: None,
+                   Event(), continue_event, Event())
     assert dry.run("Іван Шевченко") == "DRY RUN COMPLETE — nothing submitted"
     assert dry.machine.current is State.READY_TO_SUBMIT
     assert counts["submit"] == 0
+    assert len(prompts) == 2
+    assert counts["open_site"] == 1
+    assert any("journal is not visible yet" in status for status in statuses)
 
     stop = Event()
     manual = Workflow(settings(False), statuses.append, lambda: None, lambda summary: stop.set(),

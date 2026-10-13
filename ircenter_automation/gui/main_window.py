@@ -157,7 +157,10 @@ class MainWindow(QMainWindow):
             self.status_panel.append(str(exc))
 
     def authentication_needed(self) -> None:
-        self.status_panel.append("Sign in manually in the browser, then press Continue after login")
+        self.status_panel.append(
+            "Complete any portal security verification and sign in in the open browser. "
+            "Open Журнал висновків; press Continue only when the journal is visible."
+        )
         self.continue_button.setEnabled(True)
 
     def continue_after_login(self) -> None:

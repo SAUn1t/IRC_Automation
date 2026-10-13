@@ -6,7 +6,7 @@ from typing import Callable
 
 from .browser import BrowserSession, require_selectors
 from .documents import find_document, parse_document
-from .errors import AuthenticationRequired, Stopped, SubmissionNotConfirmed
+from .errors import Stopped, SubmissionNotConfirmed
 from .form_filler import FormFiller
 from .ircenter import IRCenter
 from .mapping import load_mapping, map_document
@@ -76,12 +76,17 @@ class Workflow:
                 self._advance(State.BROWSER_READY, "IR Center opened")
                 site = IRCenter(page, self.settings.selectors, self.settings.timeout_ms)
                 if not site.authenticated():
-                    self.on_authentication()
-                    self._wait(self.continue_event)
-                    browser.verify_domain()
-                    browser.open_site()
-                    if not site.authenticated():
-                        raise AuthenticationRequired("Sign in manually and press Continue after login")
+                    while True:
+                        self.continue_event.clear()
+                        self.on_authentication()
+                        self._wait(self.continue_event)
+                        browser.verify_domain()
+                        if site.authenticated():
+                            break
+                        self.on_status(
+                            "The conclusions journal is not visible yet. Complete the portal's security "
+                            "verification and sign in, then open Журнал висновків and press Continue again."
+                        )
                 self._advance(State.AUTHENTICATED, "Conclusions journal confirmed")
                 site.find_child(child)
                 self._advance(State.CHILD_FOUND, "Exact child match found")
