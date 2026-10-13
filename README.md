@@ -21,7 +21,7 @@ The base application is implemented. **Preview DOCX locally** works without the 
 
 ## Windows setup
 
-Install Python 3.12 on Windows. Extract the source bundle to a folder, then run `setup_windows.cmd` once and `run_windows.cmd` to open the app. Both scripts now keep their command window open so you can read any error. Alternatively, in PowerShell from the repository directory:
+Install Python 3.12 on Windows (other Python versions can remain installed). The Windows Python install manager supports `py install 3.12`; otherwise use the Python 3.12 installer from python.org. Extract the source bundle to a folder, then run `setup_windows.cmd` once and `run_windows.cmd` to open the app. Both scripts keep their command window open so you can read any error. Alternatively, in PowerShell from the repository directory:
 
 ```powershell
 py -3.12 -m venv .venv

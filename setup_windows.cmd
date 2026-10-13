@@ -7,12 +7,12 @@ if errorlevel 1 goto folder_failed
 echo Setting up IR Center in "%CD%"
 echo.
 
-py -3.12 --version >nul 2>&1
-if errorlevel 1 goto missing_python
-
 echo Creating Python environment...
 py -3.12 -m venv .venv
 if errorlevel 1 goto venv_failed
+if not exist ".venv\Scripts\python.exe" goto missing_python
+".venv\Scripts\python.exe" -c "import sys; sys.exit(sys.version_info[:2] != (3, 12))"
+if errorlevel 1 goto missing_python
 
 echo Installing Python packages...
 ".venv\Scripts\python.exe" -m pip install --requirement requirements.txt
@@ -32,7 +32,9 @@ echo Could not open the extracted application folder.
 goto failed
 
 :missing_python
-echo Python 3.12 was not found. Install Python 3.12 from python.org, then run this file again.
+echo Python 3.12 was not found in the environment.
+echo Run "py install 3.12" in Command Prompt, or install Python 3.12 from python.org.
+echo Other Python versions can remain installed. Then run this setup file again.
 goto failed
 
 :venv_failed
