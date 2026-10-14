@@ -28,7 +28,11 @@ async function request(path, token, options = {}) {
   const response = await fetch(BRIDGE + path, {
     cache: "no-store",
     ...options,
-    headers: { Authorization: `Bearer ${token}`, ...options.headers },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "X-IRCenter-Extension-Version": chrome.runtime.getManifest().version,
+      ...options.headers,
+    },
   });
   if (!response.ok) throw new Error(`Local app returned ${response.status}`);
   return response.json();
@@ -77,11 +81,23 @@ async function pollForJob() {
       const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       const entry = stageForTab(activeTab);
       if (entry) {
-        await chrome.storage.session.set({ jobState: { job, ...entry, tabId: activeTab.id } });
+        let scriptVersion;
         try {
-          await chrome.tabs.sendMessage(activeTab.id, { type: "start" });
+          scriptVersion = (await chrome.tabs.sendMessage(activeTab.id, { type: "contentVersion" }))?.version;
         } catch (_) {
-          if (entry.stage === "form") throw new Error("Could not start on the open form");
+          scriptVersion = null;
+        }
+        if (scriptVersion === currentVersion) {
+          await chrome.storage.session.set({ jobState: { job, ...entry, tabId: activeTab.id } });
+          const started = await chrome.tabs.sendMessage(activeTab.id, { type: "start" });
+          if (!started?.ok) throw new Error("Could not start the current portal script");
+        } else if (entry.stage === "form") {
+          // Leave any unsaved form edits in the existing tab untouched.
+          const tab = await chrome.tabs.create({ url: "about:blank", active: true });
+          await chrome.storage.session.set({ jobState: { job, ...entry, tabId: tab.id } });
+          await chrome.tabs.update(tab.id, { url: activeTab.url });
+        } else {
+          await chrome.storage.session.set({ jobState: { job, ...entry, tabId: activeTab.id } });
           await chrome.tabs.reload(activeTab.id);
         }
       } else {

@@ -2,15 +2,21 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 
+const manifest = JSON.parse(fs.readFileSync("chrome_extension/manifest.json", "utf8"));
+const contentSource = fs.readFileSync("chrome_extension/content.js", "utf8");
+assert.match(contentSource, new RegExp(`const CONTENT_VERSION = "${manifest.version}"`));
+
 const listeners = {};
 const storage = { local: { token: "test-token" }, session: {} };
 const tabs = [];
 const starts = [];
+const reloadedTabs = [];
 const requests = [];
+let contentVersion = "1.2.2";
 const chrome = {
   runtime: {
     id: "test-extension-id",
-    getManifest: () => ({ version: "1.2.1" }),
+    getManifest: () => ({ version: "1.2.2" }),
     reload: () => { throw new Error("Unexpected extension reload"); },
     onInstalled: { addListener: fn => { listeners.installed = fn; } },
     onStartup: { addListener: fn => { listeners.startup = fn; } },
@@ -33,16 +39,19 @@ const chrome = {
   },
   tabs: {
     query: async () => [],
-    sendMessage: async (id, message) => { starts.push({ id, message }); },
-    reload: async () => { throw new Error("Unexpected reload"); },
+    sendMessage: async (id, message) => {
+      if (message.type === "contentVersion") return { version: contentVersion };
+      starts.push({ id, message });
+      return { ok: true };
+    },
+    reload: async id => { reloadedTabs.push(id); },
     create: async options => {
-      const tab = { id: 7, ...options };
+      const tab = { id: 7 + tabs.length, ...options };
       tabs.push(tab);
       return tab;
     },
     update: async (id, options) => {
-      assert.equal(id, 7);
-      Object.assign(tabs[0], options);
+      Object.assign(tabs.find(tab => tab.id === id), options);
     },
   },
 };
@@ -50,7 +59,7 @@ const chrome = {
 async function fetch(url, options) {
   requests.push({ url, options });
   if (url.endsWith("/version")) {
-    return { ok: true, json: async () => ({ extensionVersion: "1.2.1" }) };
+    return { ok: true, json: async () => ({ extensionVersion: "1.2.2" }) };
   }
   if (url.endsWith("/job")) {
     return { ok: true, json: async () => ({ job: { id: "job-1" } }) };
@@ -74,6 +83,7 @@ function message(type, tabId, extra = {}) {
   assert.equal(tabs[0].url, "https://ircenter.gov.ua/irc/index/conclusions-school");
   assert.equal(storage.session.jobState.tabId, 7);
   assert.equal(requests[0].options.headers.Authorization, "Bearer test-token");
+  assert.equal(requests[0].options.headers["X-IRCenter-Extension-Version"], "1.2.2");
   assert.equal(requests[2].options.headers.Authorization, "Bearer test-token");
   assert.equal(JSON.parse(requests[2].options.body).type, "progress");
   assert.equal((await message("getState", 8)).state, null);
@@ -81,7 +91,7 @@ function message(type, tabId, extra = {}) {
   assert.equal((await message("clearState", 8)).error, "This tab does not own the extension job");
   assert.equal(storage.session.jobState.job.id, "job-1");
 
-  await message("clearState", 7);
+  await message("clearState", storage.session.jobState.tabId);
   chrome.tabs.query = async () => [{
     id: 8, url: "https://ircenter.gov.ua/irc/index/conclusion-iprs/conclusion_id/42",
   }];
@@ -113,7 +123,7 @@ function message(type, tabId, extra = {}) {
   assert.equal(storage.session.jobState.stage, "journal");
   assert.equal(tabs.length, 2);
 
-  await message("clearState", 7);
+  await message("clearState", storage.session.jobState.tabId);
   chrome.tabs.query = async () => [{
     id: 10, url: "https://ircenter.gov.ua/irc/index/conclusions-school",
   }];
@@ -153,14 +163,35 @@ function message(type, tabId, extra = {}) {
   assert.equal(storage.session.jobState.stage, "journal");
   assert.equal(tabs.length, 3);
 
-  await message("clearState", 7);
+  await message("clearState", storage.session.jobState.tabId);
+  contentVersion = "1.1.0";
+  chrome.tabs.query = async () => [{
+    id: 14, url: "https://ircenter.gov.ua/irc/index/filling-ipr/conclusion_id/42",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "form");
+  assert.equal(storage.session.jobState.tabId, tabs.at(-1).id);
+  assert.equal(tabs.at(-1).url, "https://ircenter.gov.ua/irc/index/filling-ipr/conclusion_id/42");
+  assert.equal(starts.some(item => item.id === 14), false);
+
+  await message("clearState", storage.session.jobState.tabId);
+  chrome.tabs.query = async () => [{
+    id: 15, url: "https://ircenter.gov.ua/irc/index/conclusions-school",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(reloadedTabs, [15]);
+  assert.equal(storage.session.jobState.tabId, 15);
+
+  await message("clearState", 15);
   let reloads = 0;
   chrome.runtime.getManifest = () => ({ version: "1.0.0" });
   chrome.runtime.reload = () => { reloads += 1; };
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);
-  assert.equal(storage.local.attemptedReloadVersion, "1.2.1");
+  assert.equal(storage.local.attemptedReloadVersion, "1.2.2");
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);

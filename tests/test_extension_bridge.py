@@ -24,6 +24,13 @@ def test_bridge_delivers_one_authorized_job_and_receives_status(monkeypatch):
             urlopen(base + "/job", timeout=2)
         assert unauthorized.value.code == 403
         headers = {"Authorization": f"Bearer {token}"}
+        with pytest.raises(HTTPError) as outdated:
+            urlopen(Request(base + "/job", headers=headers), timeout=2)
+        assert outdated.value.code == 409
+        assert bridge.next_status() == (
+            "error", "Chrome extension is outdated. Load it from the installed app folder."
+        )
+        headers["X-IRCenter-Extension-Version"] = "1.2.2"
         def read(path):
             with urlopen(Request(base + path, headers=headers), timeout=2) as response:
                 return json.load(response)
@@ -32,7 +39,7 @@ def test_bridge_delivers_one_authorized_job_and_receives_status(monkeypatch):
         assert job["fields"] == [{"name": "year_of_study", "value": "2"}]
         assert read("/job")["job"] is None
         assert read(f"/alive?id={bridge.job_id}") == {"active": True}
-        assert read("/version") == {"extensionVersion": "1.2.1"}
+        assert read("/version") == {"extensionVersion": "1.2.2"}
         request = Request(base + "/status", data=json.dumps({
             "id": bridge.job_id, "type": "ready", "detail": "Four fields filled",
         }).encode(), headers={**headers, "Content-Type": "application/json"}, method="POST")

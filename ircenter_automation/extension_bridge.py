@@ -64,7 +64,7 @@ class ExtensionBridge:
                 origin = self.headers.get("Origin", "")
                 if _EXTENSION_ORIGIN.fullmatch(origin):
                     self.send_header("Access-Control-Allow-Origin", origin)
-                    self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+                    self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-IRCenter-Extension-Version")
                     self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 self.end_headers()
 
@@ -79,6 +79,10 @@ class ExtensionBridge:
                     job_id = parse_qs(target.query).get("id", [""])[0]
                     self._send(200, {"active": compare_digest(job_id, bridge.job_id)})
                 elif target.path == "/job":
+                    if self.headers.get("X-IRCenter-Extension-Version") != EXTENSION_VERSION:
+                        bridge.statuses.put(("error", "Chrome extension is outdated. Load it from the installed app folder."))
+                        self._send(409, {"error": "Chrome extension version does not match"})
+                        return
                     with bridge._lock:
                         job = None if bridge._claimed else bridge.job
                         bridge._claimed = True

@@ -1,6 +1,7 @@
 (() => {
   const SITE = "https://ircenter.gov.ua";
   const JOURNAL = "/irc/index/conclusions-school";
+  const CONTENT_VERSION = "1.2.2";
   const normalize = value => String(value || "").normalize("NFC").replace(/\s+/g, " ").trim();
   const same = (left, right) => normalize(left).toLocaleLowerCase("uk") === normalize(right).toLocaleLowerCase("uk");
 
@@ -228,7 +229,9 @@
   }
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (message.type === "start") {
+    if (message.type === "contentVersion") {
+      sendResponse({ version: CONTENT_VERSION });
+    } else if (message.type === "start") {
       run();
       sendResponse({ ok: true });
     }
