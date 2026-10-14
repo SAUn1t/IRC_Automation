@@ -4,7 +4,9 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 dist/
+dist-installer/
 build/
+playwright-browsers/
 *.spec
 browser-profile/
 logs/

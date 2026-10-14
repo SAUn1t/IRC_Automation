@@ -1,19 +1,22 @@
 import json
+import sys
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import QThread, Signal
+from PySide6.QtCore import QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QApplication, QComboBox, QDialog, QFileDialog, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton,
     QTextEdit, QVBoxLayout, QWidget,
 )
 
 from ..documents import find_document, inspect_document, parse_document
+from .. import __version__
 from ..errors import WorkflowError
 from ..extension_workflow import ExtensionWorkflow
 from ..manual_entry import prepare_manual_entry
 from ..normalization import comparison_key, parse_child_name, resolve_two_word_name
 from ..settings import load_settings
+from ..updater import Release, UpdateError, check_for_update, download_update, launch_update
 from ..workflow import ReviewSummary, Workflow
 
 
@@ -56,12 +59,44 @@ class Worker(QThread):
         self.submit_event.set()
 
 
+class UpdateCheckWorker(QThread):
+    found = Signal(object)
+    failed = Signal(str)
+
+    def run(self) -> None:
+        try:
+            self.found.emit(check_for_update())
+        except UpdateError as exc:
+            self.failed.emit(str(exc))
+
+
+class UpdateDownloadWorker(QThread):
+    ready = Signal(object)
+    failed = Signal(str)
+
+    def __init__(self, release: Release, destination: Path):
+        super().__init__()
+        self.release = release
+        self.destination = destination
+
+    def run(self) -> None:
+        try:
+            self.ready.emit(download_update(self.release, self.destination))
+        except UpdateError as exc:
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     def __init__(self, settings_path: Path):
         super().__init__()
         self.settings_path = settings_path
         self.worker: Worker | None = None
-        self.setWindowTitle("IR Center — Local DOCX form assistant")
+        self.packaged = bool(getattr(sys, "frozen", False) and sys.platform == "win32")
+        self.available_release: Release | None = None
+        self.update_check: UpdateCheckWorker | None = None
+        self.update_download: UpdateDownloadWorker | None = None
+        self.manual_update_check = False
+        self.setWindowTitle(f"IR Center — Local DOCX form assistant v{__version__}")
         container = QWidget()
         layout = QVBoxLayout(container)
         self.name_input = QLineEdit()
@@ -91,6 +126,10 @@ class MainWindow(QMainWindow):
         self.pair_button = QPushButton("Copy extension pairing code")
         self.pair_button.clicked.connect(self.copy_extension_pairing_code)
         layout.addWidget(self.pair_button)
+        self.update_button = QPushButton("Check for updates")
+        self.update_button.clicked.connect(self.update_clicked)
+        self.update_button.setVisible(self.packaged)
+        layout.addWidget(self.update_button)
         self.profile_label = QLabel()
         self.profile_label.setWordWrap(True)
         layout.addWidget(self.profile_label)
@@ -126,6 +165,65 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(container)
         self.resize(720, 480)
         self.refresh_settings()
+        if self.packaged:
+            QTimer.singleShot(1500, self.check_updates)
+
+    def check_updates(self, manual: bool = False) -> None:
+        if not self.packaged or (self.update_check and self.update_check.isRunning()):
+            return
+        self.manual_update_check = manual
+        self.update_button.setEnabled(False)
+        self.update_check = UpdateCheckWorker()
+        self.update_check.found.connect(self.update_found)
+        self.update_check.failed.connect(self.update_check_failed)
+        self.update_check.start()
+
+    def update_found(self, release: Release | None) -> None:
+        self.available_release = release
+        if release:
+            self.update_button.setText(f"Install update v{release.version}")
+            self.status_panel.append(f"Update v{release.version} is available.")
+        elif self.manual_update_check:
+            self.status_panel.append("The app is up to date.")
+        self.update_button.setEnabled(not (self.worker and self.worker.isRunning()))
+
+    def update_check_failed(self, message: str) -> None:
+        if self.manual_update_check:
+            self.status_panel.append(message)
+        self.update_button.setEnabled(not (self.worker and self.worker.isRunning()))
+
+    def update_clicked(self) -> None:
+        if self.available_release is None:
+            self.check_updates(manual=True)
+            return
+        if self.worker and self.worker.isRunning():
+            self.status_panel.append("Finish or stop the current document before updating.")
+            return
+        self.update_button.setEnabled(False)
+        self.status_panel.append("Downloading and verifying the update installer…")
+        self.update_download = UpdateDownloadWorker(
+            self.available_release, self.settings_path.parent / "updates",
+        )
+        self.update_download.ready.connect(self.update_downloaded)
+        self.update_download.failed.connect(self.update_download_failed)
+        self.update_download.start()
+
+    def update_downloaded(self, installer: Path) -> None:
+        # The signal is queued to the GUI thread while run() may still be returning.
+        # Let the worker finish before QApplication tears down its QThread object.
+        if self.update_download:
+            self.update_download.wait(1000)
+        try:
+            launch_update(installer)
+        except UpdateError as exc:
+            self.update_download_failed(str(exc))
+            return
+        self.status_panel.append("Installer started. The app will close and reopen after updating.")
+        QApplication.instance().quit()
+
+    def update_download_failed(self, message: str) -> None:
+        self.status_panel.append(message)
+        self.update_button.setEnabled(True)
 
     def refresh_settings(self) -> None:
         try:
@@ -195,6 +293,7 @@ class MainWindow(QMainWindow):
         self.manual_button.setEnabled(False)
         self.browser_mode.setEnabled(False)
         self.pair_button.setEnabled(False)
+        self.update_button.setEnabled(False)
 
     def show_manual_entry(self) -> None:
         try:
@@ -284,6 +383,7 @@ class MainWindow(QMainWindow):
         self.manual_button.setEnabled(True)
         self.browser_mode.setEnabled(True)
         self.pair_button.setEnabled(True)
+        self.update_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
@@ -296,11 +396,21 @@ class MainWindow(QMainWindow):
         self.manual_button.setEnabled(True)
         self.browser_mode.setEnabled(True)
         self.pair_button.setEnabled(True)
+        self.update_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.continue_button.setEnabled(False)
         self.submit_button.setEnabled(False)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        if self.update_download and self.update_download.isRunning():
+            self.status_panel.append("Wait for the update download to finish before closing.")
+            event.ignore()
+            return
+        if self.update_check and self.update_check.isRunning():
+            self.update_check.wait(13000)
+            if self.update_check.isRunning():
+                event.ignore()
+                return
         if self.worker and self.worker.isRunning():
             self.worker.stop()
             self.worker.wait(15000)

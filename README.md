@@ -19,9 +19,17 @@ The conclusions journal has a 10-column table: the name link is in column 2 and 
 | `form_filler.py` | Fill and read back each field, then run a full verification pass |
 | `gui/main_window.py` | PySide6 GUI and worker thread |
 
-`requirements.txt` uses Python 3.12+, PySide6, Playwright, python-docx, and pytest. No remote processing service is used. A future PyInstaller build can bundle the Python app; Playwright browser binaries and the user's profile still need an explicit packaging plan.
+`requirements.txt` uses Python 3.12+, PySide6, Playwright, python-docx, and pytest. No remote processing service is used. Tagged releases build a Windows installer with Python, the Playwright browser, and the Chrome extension files. The user's settings and browser profile stay outside the installation folder.
 
-## Windows setup
+## Windows installer and updates
+
+Download and run [IRCenterAssistant-Setup.exe](https://github.com/SAUn1t/IRC_Automation/releases/latest/download/IRCenterAssistant-Setup.exe) once. It installs for the current Windows user and creates a Start menu shortcut. Python and `setup_windows.cmd` are not needed for the installer. The app automatically checks for a newer GitHub release when it opens. When one is available, click **Install update**; the app downloads the release installer, verifies its SHA-256 digest against GitHub's release metadata, installs it, and reopens. If a check cannot reach GitHub, the app still runs normally and **Check for updates** can retry it.
+
+Existing settings, pairing code, DOCX folder choice, and browser profile remain in `%USERPROFILE%\.ircenter-automation`. To use the Chrome extension with the installer, load it once from `%LOCALAPPDATA%\Programs\IRCenterAssistant\chrome_extension` through `chrome://extensions` → **Load unpacked**, then pair it using the app's **Copy extension pairing code** button. If you previously loaded the extension from an extracted source ZIP, switch it to this stable installed path once. Future extension updates reload automatically when the app starts processing; if Chrome reports that the extension path is outdated, load it again from the installed folder.
+
+The Windows release is built by `.github/workflows/release-windows.yml` when a version tag matching `ircenter_automation.__version__` is pushed. The installer is currently unsigned, so Windows may show a publisher warning on the first install.
+
+## Source setup
 
 Install Python 3.12 on Windows (other Python versions can remain installed). The Windows Python install manager supports `py install 3.12`; otherwise use the Python 3.12 installer from python.org. Extract the source bundle to a folder, then run `setup_windows.cmd` once and `run_windows.cmd` to open the app. Both scripts keep their command window open so you can read any error. Alternatively, in PowerShell from the repository directory:
 
@@ -39,11 +47,11 @@ On first launch, example configuration is copied to `%USERPROFILE%\.ircenter-aut
 
 Chrome's Google sign-in may reject a browser started with remote debugging. The extension mode uses your existing Chrome profile and avoids remote debugging. The extension opens the conclusions journal in the Chrome profile where it is installed, then performs the matching, navigation, and four-field fill there. Install the extension once:
 
-1. In your usual Chrome, open `chrome://extensions`, enable **Developer mode**, and click **Load unpacked**. Choose the `chrome_extension` directory inside the extracted app folder. Keep the extension enabled.
+1. In your usual Chrome, open `chrome://extensions`, enable **Developer mode**, and click **Load unpacked**. For the installer, choose `%LOCALAPPDATA%\Programs\IRCenterAssistant\chrome_extension`; for a source checkout, choose its `chrome_extension` directory. Keep the extension enabled.
 2. Start the desktop app and select **Chrome extension (existing profile)**. Click **Copy extension pairing code**. Open the extension's toolbar popup, paste the code, and click **Save pairing**. The code remains on your computer; never share it.
 3. Keep that Chrome profile open. Enter the child's two-word name, select the DOCX folder, and click **Process**. Within about 30 seconds, the extension continues from an active conclusions journal, child IPR page, or “Створити ІПР” form. From other pages it opens the journal in a new tab. If an open IPR page or form belongs to another child, it leaves that tab alone and searches the journal in a new tab. It checks the child before filling the four exact fields, then stops for manual review. It does not press **Сформувати документ**.
 
-Chrome requires the one-time manual extension installation. After replacing the app files, click **Reload** for the extension on `chrome://extensions`. The portal may still require you to sign in through its normal page. The extension does not solve or override any security check. If the app says it is waiting for the extension, confirm the extension is enabled and paired in the same Chrome profile that can open the portal normally.
+Chrome requires the one-time manual extension installation. Installer updates automatically reload an extension loaded from the stable installed path when the app next processes a document. Source checkout updates still require **Reload** on `chrome://extensions`. The portal may still require you to sign in through its normal page. The extension does not solve or override any security check. If the app says it is waiting for the extension, confirm the extension is enabled and paired in the same Chrome profile that can open the portal normally.
 
 The journal accepts next-page links using either `?page=2` or `/page/2`. An unexpected portal link reports its route shape with numeric IDs hidden, so you can share that error without sharing a record ID.
 

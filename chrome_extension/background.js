@@ -40,6 +40,31 @@ async function pollForJob() {
       if (alive.active) return;
       await chrome.storage.session.remove("jobState");
     }
+    const { extensionVersion } = await request("/version", token);
+    const currentVersion = chrome.runtime.getManifest().version;
+    const parts = value => /^\d+\.\d+\.\d+$/.test(value || "")
+      ? value.split(".").map(Number) : null;
+    const target = parts(extensionVersion);
+    const current = parts(currentVersion);
+    if (!target || !current) return;
+    const newer = target.some((part, index) => part > current[index] &&
+      target.slice(0, index).every((prior, earlier) => prior === current[earlier]));
+    if (newer) {
+      const { attemptedReloadVersion } = await chrome.storage.local.get("attemptedReloadVersion");
+      if (attemptedReloadVersion !== extensionVersion) {
+        await chrome.storage.local.set({ attemptedReloadVersion: extensionVersion });
+        chrome.runtime.reload();
+        return;
+      }
+      const { job } = await request("/job", token);
+      if (job) await request("/status", token, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: job.id, type: "error",
+          detail: "Chrome extension is outdated. Load it from the installed app folder." }),
+      });
+      return;
+    }
     const { job } = await request("/job", token);
     if (!job) return;
     try {

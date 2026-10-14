@@ -9,6 +9,7 @@ from hmac import compare_digest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from . import EXTENSION_VERSION
 from .errors import WorkflowError
 from .manual_entry import ManualEntryGuide
 
@@ -72,7 +73,9 @@ class ExtensionBridge:
                     self._send(403, {"error": "Forbidden"})
                     return
                 target = urlparse(self.path)
-                if target.path == "/alive":
+                if target.path == "/version":
+                    self._send(200, {"extensionVersion": EXTENSION_VERSION})
+                elif target.path == "/alive":
                     job_id = parse_qs(target.query).get("id", [""])[0]
                     self._send(200, {"active": compare_digest(job_id, bridge.job_id)})
                 elif target.path == "/job":

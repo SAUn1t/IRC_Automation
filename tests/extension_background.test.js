@@ -10,6 +10,8 @@ const requests = [];
 const chrome = {
   runtime: {
     id: "test-extension-id",
+    getManifest: () => ({ version: "1.1.0" }),
+    reload: () => { throw new Error("Unexpected extension reload"); },
     onInstalled: { addListener: fn => { listeners.installed = fn; } },
     onStartup: { addListener: fn => { listeners.startup = fn; } },
     onMessage: { addListener: fn => { listeners.message = fn; } },
@@ -19,7 +21,10 @@ const chrome = {
     onAlarm: { addListener: fn => { listeners.alarm = fn; } },
   },
   storage: {
-    local: { get: async () => storage.local },
+    local: {
+      get: async () => storage.local,
+      set: async value => Object.assign(storage.local, value),
+    },
     session: {
       get: async () => storage.session,
       set: async value => Object.assign(storage.session, value),
@@ -44,6 +49,9 @@ const chrome = {
 
 async function fetch(url, options) {
   requests.push({ url, options });
+  if (url.endsWith("/version")) {
+    return { ok: true, json: async () => ({ extensionVersion: "1.1.0" }) };
+  }
   if (url.endsWith("/job")) {
     return { ok: true, json: async () => ({ job: { id: "job-1" } }) };
   }
@@ -66,8 +74,8 @@ function message(type, tabId, extra = {}) {
   assert.equal(tabs[0].url, "https://ircenter.gov.ua/irc/index/conclusions-school");
   assert.equal(storage.session.jobState.tabId, 7);
   assert.equal(requests[0].options.headers.Authorization, "Bearer test-token");
-  assert.equal(requests[1].options.headers.Authorization, "Bearer test-token");
-  assert.equal(JSON.parse(requests[1].options.body).type, "progress");
+  assert.equal(requests[2].options.headers.Authorization, "Bearer test-token");
+  assert.equal(JSON.parse(requests[2].options.body).type, "progress");
   assert.equal((await message("getState", 8)).state, null);
   assert.equal((await message("getState", 7)).state.job.id, "job-1");
   assert.equal((await message("clearState", 8)).error, "This tab does not own the extension job");
@@ -124,5 +132,18 @@ function message(type, tabId, extra = {}) {
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(storage.session.jobState.stage, "journal");
   assert.equal(tabs.length, 3);
+
+  await message("clearState", 7);
+  let reloads = 0;
+  chrome.runtime.getManifest = () => ({ version: "1.0.0" });
+  chrome.runtime.reload = () => { reloads += 1; };
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 1);
+  assert.equal(storage.local.attemptedReloadVersion, "1.1.0");
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(reloads, 1);
+  assert.equal(JSON.parse(requests.at(-1).options.body).type, "error");
   console.log("extension background handoff passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });
