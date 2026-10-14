@@ -10,7 +10,7 @@ const requests = [];
 const chrome = {
   runtime: {
     id: "test-extension-id",
-    getManifest: () => ({ version: "1.1.0" }),
+    getManifest: () => ({ version: "1.2.0" }),
     reload: () => { throw new Error("Unexpected extension reload"); },
     onInstalled: { addListener: fn => { listeners.installed = fn; } },
     onStartup: { addListener: fn => { listeners.startup = fn; } },
@@ -50,7 +50,7 @@ const chrome = {
 async function fetch(url, options) {
   requests.push({ url, options });
   if (url.endsWith("/version")) {
-    return { ok: true, json: async () => ({ extensionVersion: "1.1.0" }) };
+    return { ok: true, json: async () => ({ extensionVersion: "1.2.0" }) };
   }
   if (url.endsWith("/job")) {
     return { ok: true, json: async () => ({ job: { id: "job-1" } }) };
@@ -126,6 +126,26 @@ function message(type, tabId, extra = {}) {
 
   await message("clearState", 10);
   chrome.tabs.query = async () => [{
+    id: 12, url: "https://ircenter.gov.ua/irc/index/conclusions-school/page/2",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "journal");
+  assert.equal(storage.session.jobState.tabId, 12);
+  assert.equal(tabs.length, 2);
+
+  await message("clearState", 12);
+  chrome.tabs.query = async () => [{
+    id: 13, url: "https://ircenter.gov.ua/irc/index/conclusions-school?page=2",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "journal");
+  assert.equal(storage.session.jobState.tabId, 13);
+  assert.equal(tabs.length, 2);
+
+  await message("clearState", 13);
+  chrome.tabs.query = async () => [{
     id: 11, url: "https://ircenter.gov.ua/irc/index/conclusions-search",
   }];
   listeners.alarm({ name: "ircenter-job-poll" });
@@ -140,7 +160,7 @@ function message(type, tabId, extra = {}) {
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);
-  assert.equal(storage.local.attemptedReloadVersion, "1.1.0");
+  assert.equal(storage.local.attemptedReloadVersion, "1.2.0");
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);

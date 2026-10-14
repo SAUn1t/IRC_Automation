@@ -7,8 +7,14 @@ function stageForTab(tab) {
   if (!tab?.url) return null;
   let url;
   try { url = new URL(tab.url); } catch (_) { return null; }
-  if (url.origin !== "https://ircenter.gov.ua" || url.search || url.hash) return null;
-  if (url.pathname === "/irc/index/conclusions-school") return { stage: "journal" };
+  if (url.origin !== "https://ircenter.gov.ua" || url.hash) return null;
+  if (/^\/irc\/index\/conclusions-school(?:\/page\/[1-9]\d*)?\/?$/.test(url.pathname)) {
+    const pageQuery = url.pathname === "/irc/index/conclusions-school" &&
+      [...url.searchParams.keys()].length === 1 &&
+      /^[1-9]\d*$/.test(url.searchParams.get("page") || "");
+    if (!url.search || pageQuery) return { stage: "journal" };
+  }
+  if (url.search) return null;
   if (/^\/irc\/index\/conclusion-iprs\/conclusion_id\/\d+$/.test(url.pathname)) {
     return { stage: "ipr", conclusionUrl: url.href, directEntry: true };
   }

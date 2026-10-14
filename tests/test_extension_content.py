@@ -6,10 +6,13 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 
-@pytest.mark.parametrize("start_at", ["journal", "ipr", "form"])
-@pytest.mark.parametrize("next_href", ["?page=2", "/irc/index/conclusions-school/page/2"])
+@pytest.mark.parametrize("start_at,next_href,duplicate", [
+    (start_at, next_href, False)
+    for start_at in ("journal", "journal-page-2", "ipr", "form")
+    for next_href in ("?page=2", "/irc/index/conclusions-school/page/2")
+] + [("journal", "?page=2", True)])
 def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
-    tmp_path: Path, start_at: str, next_href: str,
+    tmp_path: Path, start_at: str, next_href: str, duplicate: bool,
 ):
     chromium = shutil.which("chromium") or shutil.which("google-chrome")
     if not chromium:
@@ -21,9 +24,10 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
         {"name": "parents_phones", "value": "000 000 000"},
     ]}
     messages = []
+    page_two_requests = []
     ipr_url = "https://ircenter.gov.ua/irc/index/conclusion-iprs/conclusion_id/42"
     form_url = "https://ircenter.gov.ua/irc/index/filling-ipr/ipr_id/99/conclusion_id/42"
-    initial = {"job": job, "stage": start_at, "tabId": 42}
+    initial = {"job": job, "stage": "journal" if start_at == "journal-page-2" else start_at, "tabId": 42}
     if start_at == "ipr":
         initial["conclusionUrl"] = ipr_url
     if start_at == "form":
@@ -40,7 +44,14 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
         url = urlparse(route.request.url)
         if url.path in ("/irc/index/conclusions-school", "/irc/index/conclusions-school/page/2"):
             second = parse_qs(url.query).get("page") == ["2"] or url.path.endswith("/page/2")
-            rows = row("Шевченко Іван Петрович", 42) if second else row("Петренко Іван Петрович", 10)
+            if second:
+                page_two_requests.append(route.request.resource_type)
+                if route.request.resource_type == "fetch":
+                    route.fulfill(status=403, body="Background requests are blocked")
+                    return
+            rows = row("Шевченко Іван Петрович", 42) if second else row(
+                "Шевченко Іван Петрович" if duplicate else "Петренко Іван Петрович", 10,
+            )
             next_link = "" if second else f"<div id='pagination-digg'><a href='{next_href}'>Далі →</a></div>"
             body = f"<table class='zebra-stripe list'>{rows}</table>{next_link}"
         elif url.path == "/irc/index/conclusion-iprs/conclusion_id/42":
@@ -87,13 +98,23 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
         context.add_init_script(
             "window.chrome = window.chrome || {}; "
-            "window.chrome.runtime = {sendMessage: message => window.testBridge(message), "
+            "window.chrome.runtime = {sendMessage: message => window.testBridge(message).then(reply => {"
+            "if (message.type === 'status' && message.status === 'error') window.__errorReported = true; "
+            "return reply;}), "
             "onMessage: {addListener: () => {}}}; "
             "window.addEventListener('DOMContentLoaded', () => {" + content + "}, {once: true});"
         )
         page = context.new_page()
         page.goto({"journal": "https://ircenter.gov.ua/irc/index/conclusions-school",
+                   "journal-page-2": "https://ircenter.gov.ua" + next_href.replace("?", "/irc/index/conclusions-school?", 1),
                    "ipr": ipr_url, "form": form_url}[start_at])
+        if duplicate:
+            page.wait_for_function("window.__errorReported === true")
+            assert page.url.endswith("/irc/index/conclusions-school?page=2")
+            assert any("exactly one child" in item.get("detail", "") for item in messages)
+            assert not any(item.get("status") == "ready" for item in messages)
+            context.close()
+            return
         page.wait_for_url("**/irc/index/filling-ipr/ipr_id/99/conclusion_id/42", timeout=10000)
         expect(page.locator("[name='execution_period']")).to_have_value(job["fields"][0]["value"])
         expect(page.locator("[name='year_of_study']")).to_have_value("2")
@@ -101,6 +122,8 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
         expect(page.locator("[name='parents_phones']")).to_have_value("000 000 000")
         assert [message["type"] for message in messages].count("claim") == 0
         assert any(message["type"] == "status" and message["status"] == "ready" for message in messages)
+        if start_at.startswith("journal"):
+            assert page_two_requests and set(page_two_requests) == {"document"}
         context.close()
 
 

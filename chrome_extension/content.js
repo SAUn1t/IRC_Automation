@@ -12,14 +12,22 @@
 
   function checkedUrl(href, pattern, base = location.href, allowPageQuery = false) {
     const url = new URL(href, base);
-    const pageQuery = allowPageQuery && [...url.searchParams.keys()].length === 1 &&
-      /^\d+$/.test(url.searchParams.get("page") || "");
+    const pageQuery = allowPageQuery && url.pathname === JOURNAL &&
+      [...url.searchParams.keys()].length === 1 &&
+      /^[1-9]\d*$/.test(url.searchParams.get("page") || "");
     if (url.origin !== SITE || !pattern.test(url.pathname) ||
         (url.search && !pageQuery) || url.hash) {
       throw new Error("Portal link does not match the expected route: " +
         url.pathname.replace(/\d+/g, ":n"));
     }
     return url;
+  }
+
+  function journalPageNumber(url) {
+    const pathPage = url.pathname.match(/\/page\/([1-9]\d*)\/?$/);
+    const number = Number(pathPage ? pathPage[1] : (url.searchParams.get("page") || "1"));
+    if (!Number.isSafeInteger(number) || number < 1) throw new Error("Journal page number is invalid");
+    return number;
   }
 
   async function save(state) {
@@ -64,7 +72,7 @@
         const iprLink = row.cells[7].querySelector("a[href]");
         if (!iprLink) throw new Error("Matching journal row has no IPR link");
         matches.push(checkedUrl(iprLink.getAttribute("href"),
-          /^\/irc\/index\/conclusion-iprs\/conclusion_id\/\d+$/, pageUrl));
+          /^\/irc\/index\/conclusion-iprs\/conclusion_id\/\d+$/, pageUrl).href);
       }
     }
     const nextLinks = [...doc.querySelectorAll("#pagination-digg a[href]")]
@@ -76,27 +84,39 @@
   }
 
   async function processJournal(state) {
-    if (location.pathname !== JOURNAL) throw new Error("Open the conclusions journal to start");
-    await waitFor("table.zebra-stripe.list", 60000);
-    const matches = [];
-    const visited = new Set();
-    let url = new URL(location.href);
-    let doc = document;
-    for (let count = 0; count < 100; count++) {
-      if (visited.has(url.href)) throw new Error("Journal pagination loops");
-      visited.add(url.href);
-      const next = journalPage(doc, url.href, state.job, matches);
-      if (!next) break;
-      if (count === 99) throw new Error("Journal exceeds 100 pages");
-      const response = await fetch(next.href, { credentials: "include", cache: "no-store" });
-      if (!response.ok || new URL(response.url).origin !== SITE) {
-        throw new Error("Could not read the next journal page");
-      }
-      doc = new DOMParser().parseFromString(await response.text(), "text/html");
-      url = next;
+    const url = checkedUrl(location.href,
+      /^\/irc\/index\/conclusions-school(?:\/page\/[1-9]\d*)?\/?$/, location.href, true);
+    const pageNumber = journalPageNumber(url);
+    // Starting on a later journal page must still scan earlier pages for duplicates.
+    if (!state.journalVisited && pageNumber !== 1) {
+      location.assign(SITE + JOURNAL);
+      return;
     }
-    if (matches.length !== 1) throw new Error("Expected exactly one child match in the journal");
-    state.conclusionUrl = matches[0].href;
+    state.journalVisited ||= [];
+    state.journalMatches ||= [];
+    if (pageNumber !== (state.journalNextPage || 1) || state.journalVisited.includes(pageNumber)) {
+      throw new Error("Journal pagination changed or looped");
+    }
+    await waitFor("table.zebra-stripe.list", 60000);
+    const next = journalPage(document, url.href, state.job, state.journalMatches);
+    state.journalVisited.push(pageNumber);
+    if (state.journalMatches.length > 1) throw new Error("Expected exactly one child match in the journal");
+    if (next) {
+      if (state.journalVisited.length >= 100) throw new Error("Journal exceeds 100 pages");
+      const nextPage = journalPageNumber(next);
+      if (nextPage !== pageNumber + 1) throw new Error("Journal pagination skipped or looped");
+      state.journalNextPage = nextPage;
+      await save(state);
+      await report(state, "progress", `Scanning journal page ${nextPage}`);
+      // A top-level Chrome navigation uses the same path as clicking “Далі”.
+      location.assign(next.href);
+      return;
+    }
+    if (state.journalMatches.length !== 1) throw new Error("Expected exactly one child match in the journal");
+    state.conclusionUrl = state.journalMatches[0];
+    delete state.journalMatches;
+    delete state.journalVisited;
+    delete state.journalNextPage;
     state.stage = "ipr";
     await save(state);
     await report(state, "progress", "Exact child found in the journal");

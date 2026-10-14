@@ -53,7 +53,7 @@ Chrome's Google sign-in may reject a browser started with remote debugging. The 
 
 Chrome requires the one-time manual extension installation. Installer updates automatically reload an extension loaded from the stable installed path when the app next processes a document. Source checkout updates still require **Reload** on `chrome://extensions`. The portal may still require you to sign in through its normal page. The extension does not solve or override any security check. If the app says it is waiting for the extension, confirm the extension is enabled and paired in the same Chrome profile that can open the portal normally.
 
-The journal accepts next-page links using either `?page=2` or `/page/2`. An unexpected portal link reports its route shape with numeric IDs hidden, so you can share that error without sharing a record ID.
+The journal accepts next-page links using either `?page=2` or `/page/2`. The extension opens each page as a normal Chrome navigation, so it can continue when the portal rejects background page requests. It starts from page 1 even if page 2 is already open, preserving the duplicate-name check across the whole journal. An unexpected portal link reports its route shape with numeric IDs hidden, so you can share that error without sharing a record ID.
 
 If the portal shows Cloudflare “Performing security verification” in a Playwright launch mode, the app waits for the journal and does not reload the page when you press **Continue after login**. If the check loops while your ordinary Chrome works, select **Chrome extension (existing profile)**. **Chrome normal window** is a separate profile controlled through remote debugging; Google may reject sign-in there. The app does not override the portal's security check.
 
