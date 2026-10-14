@@ -2,6 +2,8 @@
 
 The supplied DOCX follows an 11-section school IPR layout. The portal page opened through “Створити ІПР” shows a different 13-section form. This report describes structure only; no document values are stored here.
 
+A completed portal PDF and a teacher DOCX from different school years have now been compared field by field in [the detailed mapping](portal_pdf_to_teacher_docx_matrix.md). The PDF's old values must not be reused as current-year values. The detailed mapping identifies direct counterparts, conditional counterparts, missing fields, and conflicts requiring review.
+
 | DOCX content | Portal counterpart | Current handling |
 | --- | --- | --- |
 | Execution period | `execution_period` | Filled and verified |
