@@ -153,12 +153,13 @@ class IRCenter:
     def verify_child_identity(self, child: ChildName, *, on_form: bool = False) -> None:
         if on_form and self.s.get("form_child_full_name"):
             name = self.page.locator(self.s["form_child_full_name"])
-            if name.count() != 1 or self.s.get("form_child_name_format") != "surname_first_patronymic":
+            if self.s.get("form_child_name_format") != "surname_first_patronymic":
                 raise ChildIdentityMismatch("IPR form child name is missing or ambiguous")
-            full_name = labeled_school_full_name(name.inner_text())
-            if full_name is None:
-                raise ChildIdentityMismatch("IPR form child name label changed")
-            first, surname = self._full_name_identity(full_name)
+            names = [full_name for i in range(name.count())
+                     if (full_name := labeled_school_full_name(name.nth(i).inner_text())) is not None]
+            if len(names) != 1:
+                raise ChildIdentityMismatch("IPR form child name is missing or ambiguous")
+            first, surname = self._full_name_identity(names[0])
             if not child.matches(first, surname):
                 raise ChildIdentityMismatch("IPR form does not belong to the requested child")
             return

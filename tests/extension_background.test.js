@@ -10,7 +10,7 @@ const requests = [];
 const chrome = {
   runtime: {
     id: "test-extension-id",
-    getManifest: () => ({ version: "1.2.0" }),
+    getManifest: () => ({ version: "1.2.1" }),
     reload: () => { throw new Error("Unexpected extension reload"); },
     onInstalled: { addListener: fn => { listeners.installed = fn; } },
     onStartup: { addListener: fn => { listeners.startup = fn; } },
@@ -50,7 +50,7 @@ const chrome = {
 async function fetch(url, options) {
   requests.push({ url, options });
   if (url.endsWith("/version")) {
-    return { ok: true, json: async () => ({ extensionVersion: "1.2.0" }) };
+    return { ok: true, json: async () => ({ extensionVersion: "1.2.1" }) };
   }
   if (url.endsWith("/job")) {
     return { ok: true, json: async () => ({ job: { id: "job-1" } }) };
@@ -160,7 +160,7 @@ function message(type, tabId, extra = {}) {
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);
-  assert.equal(storage.local.attemptedReloadVersion, "1.2.0");
+  assert.equal(storage.local.attemptedReloadVersion, "1.2.1");
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);

@@ -6,13 +6,13 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 
-@pytest.mark.parametrize("start_at,next_href,duplicate", [
-    (start_at, next_href, False)
+@pytest.mark.parametrize("start_at,next_href,duplicate,top_create", [
+    (start_at, next_href, False, False)
     for start_at in ("journal", "journal-page-2", "ipr", "form")
     for next_href in ("?page=2", "/irc/index/conclusions-school/page/2")
-] + [("journal", "?page=2", True)])
+] + [("journal", "?page=2", True, False), ("ipr", "?page=2", False, True)])
 def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
-    tmp_path: Path, start_at: str, next_href: str, duplicate: bool,
+    tmp_path: Path, start_at: str, next_href: str, duplicate: bool, top_create: bool,
 ):
     chromium = shutil.which("chromium") or shutil.which("google-chrome")
     if not chromium:
@@ -26,7 +26,8 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
     messages = []
     page_two_requests = []
     ipr_url = "https://ircenter.gov.ua/irc/index/conclusion-iprs/conclusion_id/42"
-    form_url = "https://ircenter.gov.ua/irc/index/filling-ipr/ipr_id/99/conclusion_id/42"
+    form_url = ("https://ircenter.gov.ua/irc/index/filling-ipr/conclusion_id/42" if start_at == "form" or top_create
+                else "https://ircenter.gov.ua/irc/index/filling-ipr/ipr_id/99/conclusion_id/42")
     initial = {"job": job, "stage": "journal" if start_at == "journal-page-2" else start_at, "tabId": 42}
     if start_at == "ipr":
         initial["conclusionUrl"] = ipr_url
@@ -57,14 +58,21 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
         elif url.path == "/irc/index/conclusion-iprs/conclusion_id/42":
             body = ("<table class='zebra-stripe list'>"
                     "<tr><td>Прізвище, ім'я, по батькові дитини</td><td>Шевченко Іван Петрович</td></tr>"
-                    "<tr><td>date</td><td>school</td><td>period</td><td>protocol</td><td>"
-                    "<a class='with-icon' href='/irc/index/filling-ipr/ipr_id/99/conclusion_id/42'>"
-                    "<img src='/images/ico/add.png'></a></td><td></td></tr></table>")
-        elif url.path == "/irc/index/filling-ipr/ipr_id/99/conclusion_id/42":
+                    "</table>"
+                    + ("<a class='add-link with-icon' href='/irc/index/filling-ipr/conclusion_id/42'>"
+                       "Створити ІПР</a>" if top_create else
+                       "<table class='zebra-stripe list'><tr><td>date</td><td>school</td><td>period</td>"
+                       "<td>protocol</td><td><a class='with-icon' "
+                       "href='/irc/index/filling-ipr/ipr_id/99/conclusion_id/42'>"
+                       "<img src='/images/ico/add.png'></a></td><td></td></tr></table>"))
+        elif url.path in ("/irc/index/filling-ipr/ipr_id/99/conclusion_id/42",
+                          "/irc/index/filling-ipr/conclusion_id/42"):
             body = ("<div id='content-wrapper'><div class='nosidebar'>"
                     "<h1>Створення індивідуальної програми розвитку учня закладу загальної середньої освіти</h1>"
                     "<form id='iprForm'>"
                     "<p>прізвище, власне ім’я, по батькові(за наявності) Шевченко Іван Петрович</p>"
+                    "<p>прізвище, власне ім’я, по батькові (за наявності) батьків "
+                    "(інших законних представників) учня Шевченко Олена Іванівна</p>"
                     "<input name='execution_period'><select name='year_of_study'>"
                     "<option value='1'>1</option><option value='2'>2</option></select>"
                     "<input name='child_grade'><input name='parents_phones'>"
@@ -115,7 +123,7 @@ def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
             assert not any(item.get("status") == "ready" for item in messages)
             context.close()
             return
-        page.wait_for_url("**/irc/index/filling-ipr/ipr_id/99/conclusion_id/42", timeout=10000)
+        page.wait_for_url(form_url, timeout=10000)
         expect(page.locator("[name='execution_period']")).to_have_value(job["fields"][0]["value"])
         expect(page.locator("[name='year_of_study']")).to_have_value("2")
         expect(page.locator("[name='child_grade']")).to_have_value("2-А")

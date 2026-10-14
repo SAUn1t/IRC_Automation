@@ -160,12 +160,12 @@
       "Створення індивідуальної програми розвитку учня закладу загальної середньої освіти") {
       throw new Error("Opened form heading does not match");
     }
-    const names = [...form.querySelectorAll("p")].map(p => normalize(p.textContent))
+    const names = [...form.querySelectorAll("p")]
+      .map(element => normalize(element.textContent))
       .map(text => text.match(/^прізвище,\s*власне ім[’ʼ']я,\s*по батькові\s*\(за наявності\)\s+(.+)$/i))
-      .filter(Boolean);
-    if (names.length !== 1) {
-      throw new Error("IPR form child identity is missing");
-    }
+      .filter(match => match && normalize(match[1]).split(" ").length === 3);
+    if (names.length === 0) throw new Error("IPR form child name label was not found; no fields changed");
+    if (names.length > 1) throw new Error("IPR form child name is ambiguous; no fields changed");
     if (!fullNameMatches(names[0][1], state.job.child)) {
       if (state.directEntry) return restartFromJournal(state);
       throw new Error("IPR form child identity does not match");

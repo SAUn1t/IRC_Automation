@@ -32,7 +32,7 @@ def test_bridge_delivers_one_authorized_job_and_receives_status(monkeypatch):
         assert job["fields"] == [{"name": "year_of_study", "value": "2"}]
         assert read("/job")["job"] is None
         assert read(f"/alive?id={bridge.job_id}") == {"active": True}
-        assert read("/version") == {"extensionVersion": "1.2.0"}
+        assert read("/version") == {"extensionVersion": "1.2.1"}
         request = Request(base + "/status", data=json.dumps({
             "id": bridge.job_id, "type": "ready", "detail": "Four fields filled",
         }).encode(), headers={**headers, "Content-Type": "application/json"}, method="POST")
