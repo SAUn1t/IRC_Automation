@@ -1,11 +1,9 @@
 """Run the exact-field workflow inside the user's already signed-in Chrome."""
 
-import subprocess
 import time
 from threading import Event
 from typing import Callable
 
-from .browser import BrowserSession
 from .errors import Stopped, WorkflowError
 from .extension_bridge import ExtensionBridge
 from .manual_entry import prepare_manual_entry
@@ -30,15 +28,7 @@ class ExtensionWorkflow:
             ("Only four exact fields were transferred. Review and complete the remaining IPR sections manually.",),
         )
         with ExtensionBridge(self.settings.extension_token, guide) as bridge:
-            browser = BrowserSession(self.settings)._browser_executable()
-            try:
-                subprocess.Popen(
-                    [str(browser), self.settings.website_url],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                )
-            except OSError as exc:
-                raise WorkflowError("Could not open the installed Chrome browser") from exc
-            self.on_status("Chrome opened. Waiting for the paired extension on the conclusions journal.")
+            self.on_status("Waiting for the extension in your signed-in Chrome profile to open the portal.")
             reminder_at = time.monotonic() + 30
             while True:
                 if self.stop_event.is_set():
@@ -54,7 +44,7 @@ class ExtensionWorkflow:
                         return "MANUAL REVIEW — four fields filled in Chrome; no document submitted by the app"
                 elif time.monotonic() >= reminder_at:
                     self.on_status(
-                        "Still waiting for Chrome. Check that the extension is installed and paired, "
-                        "and the conclusions journal is visible. Press Stop if needed."
+                        "Still waiting for Chrome. Keep your usual Chrome profile open and check "
+                        "that the extension is installed, reloaded, and paired. Press Stop if needed."
                     )
                     reminder_at = time.monotonic() + 30

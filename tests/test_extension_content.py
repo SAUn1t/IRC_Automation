@@ -17,7 +17,7 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
         {"name": "parents_phones", "value": "000 000 000"},
     ]}
     messages = []
-    extension_state = {"value": None}
+    extension_state = {"value": {"job": job, "stage": "journal", "tabId": 42}}
 
     def row(name: str, number: int) -> str:
         return (f"<tr><td>1</td><td><a href='/irc/index/bid-view/bid_id/{number}'>{name}</a></td>"
@@ -68,8 +68,6 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
             if message["type"] == "clearState":
                 extension_state["value"] = None
                 return {"ok": True}
-            if message["type"] == "claim":
-                return {"job": job}
             if message["type"] == "alive":
                 return {"active": True}
             return {"ok": True}
@@ -88,6 +86,6 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
         expect(page.locator("[name='year_of_study']")).to_have_value("2")
         expect(page.locator("[name='child_grade']")).to_have_value("2-А")
         expect(page.locator("[name='parents_phones']")).to_have_value("000 000 000")
-        assert [message["type"] for message in messages].count("claim") == 1
+        assert [message["type"] for message in messages].count("claim") == 0
         assert any(message["type"] == "status" and message["status"] == "ready" for message in messages)
         context.close()

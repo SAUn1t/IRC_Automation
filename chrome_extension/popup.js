@@ -10,6 +10,7 @@ document.getElementById("save").addEventListener("click", async () => {
     return;
   }
   await chrome.storage.local.set({ token });
+  await chrome.runtime.sendMessage({ type: "pollNow" });
   input.value = "";
   message.textContent = "Pairing saved. Return to the desktop app and press Process.";
 });

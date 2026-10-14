@@ -29,12 +29,16 @@
     if (reply?.error) throw new Error("Local app connection was lost");
   }
 
-  async function waitFor(selector) {
-    const deadline = Date.now() + 15000;
+  async function waitFor(selector, timeout = 15000) {
+    const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const element = document.querySelector(selector);
       if (element) return element;
       await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    if (document.title.includes("Just a moment") ||
+        document.body?.textContent?.includes("Performing security verification")) {
+      throw new Error("Cloudflare verification did not finish in this Chrome profile");
     }
     throw new Error("Expected portal content did not appear");
   }
@@ -61,7 +65,7 @@
 
   async function processJournal(state) {
     if (location.pathname !== JOURNAL) throw new Error("Open the conclusions journal to start");
-    await waitFor("table.zebra-stripe.list");
+    await waitFor("table.zebra-stripe.list", 60000);
     const matches = [];
     const visited = new Set();
     let url = new URL(location.href);
@@ -158,13 +162,7 @@
         const alive = await chrome.runtime.sendMessage({ type: "alive", id: state.job.id });
         if (!alive?.active) { await clear(); state = null; }
       }
-      if (!state) {
-        if (location.pathname !== JOURNAL || !document.querySelector("table.zebra-stripe.list")) return;
-        const claimed = await chrome.runtime.sendMessage({ type: "claim" });
-        if (!claimed?.job) return;
-        state = { job: claimed.job, stage: "journal" };
-        await save(state);
-      }
+      if (!state) return;
       if (state.stage === "journal") await processJournal(state);
       else if (state.stage === "ipr") await processIpr(state);
       else if (state.stage === "form") await processForm(state);
