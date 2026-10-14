@@ -3,6 +3,21 @@ const JOURNAL = "https://ircenter.gov.ua/irc/index/conclusions-school";
 const POLL_ALARM = "ircenter-job-poll";
 let polling = false;
 
+function stageForTab(tab) {
+  if (!tab?.url) return null;
+  let url;
+  try { url = new URL(tab.url); } catch (_) { return null; }
+  if (url.origin !== "https://ircenter.gov.ua" || url.search || url.hash) return null;
+  if (url.pathname === "/irc/index/conclusions-school") return { stage: "journal" };
+  if (/^\/irc\/index\/conclusion-iprs\/conclusion_id\/\d+$/.test(url.pathname)) {
+    return { stage: "ipr", conclusionUrl: url.href, directEntry: true };
+  }
+  if (/^\/irc\/index\/filling-ipr\/(?:ipr_id\/\d+\/)?conclusion_id\/\d+$/.test(url.pathname)) {
+    return { stage: "form", formUrl: url.href, directEntry: true };
+  }
+  return null;
+}
+
 async function request(path, token, options = {}) {
   const response = await fetch(BRIDGE + path, {
     cache: "no-store",
@@ -28,14 +43,28 @@ async function pollForJob() {
     const { job } = await request("/job", token);
     if (!job) return;
     try {
-      // Create a blank tab first, so only this tab can read the job before the portal loads.
-      const tab = await chrome.tabs.create({ url: "about:blank", active: true });
-      await chrome.storage.session.set({ jobState: { job, stage: "journal", tabId: tab.id } });
-      await chrome.tabs.update(tab.id, { url: JOURNAL });
+      const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const entry = stageForTab(activeTab);
+      if (entry) {
+        await chrome.storage.session.set({ jobState: { job, ...entry, tabId: activeTab.id } });
+        try {
+          await chrome.tabs.sendMessage(activeTab.id, { type: "start" });
+        } catch (_) {
+          if (entry.stage === "form") throw new Error("Could not start on the open form");
+          await chrome.tabs.reload(activeTab.id);
+        }
+      } else {
+        // Create a blank tab first, so only this tab can read the job before the portal loads.
+        const tab = await chrome.tabs.create({ url: "about:blank", active: true });
+        await chrome.storage.session.set({ jobState: { job, stage: "journal", tabId: tab.id } });
+        await chrome.tabs.update(tab.id, { url: JOURNAL });
+      }
       await request("/status", token, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: job.id, type: "progress", detail: "Portal tab opened in the Chrome extension profile" }),
+        body: JSON.stringify({ id: job.id, type: "progress", detail: entry
+          ? `Continuing from the open ${entry.stage} page in Chrome`
+          : "Portal tab opened in the Chrome extension profile" }),
       });
     } catch (_) {
       await chrome.storage.session.remove("jobState");
@@ -65,7 +94,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
 schedulePolling();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const allowed = ["alive", "status", "getState", "setState", "clearState", "pollNow"];
+  const allowed = ["alive", "status", "getState", "setState", "clearState", "pollNow", "restartJournal"];
   if (sender.id !== chrome.runtime.id || !allowed.includes(message.type)) return false;
   (async () => {
     if (message.type === "pollNow") {
@@ -76,13 +105,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const { jobState } = await chrome.storage.session.get("jobState");
       return { state: jobState?.tabId === sender.tab?.id ? jobState : null };
     }
-    if (message.type === "setState" || message.type === "clearState") {
+    if (["setState", "clearState", "restartJournal"].includes(message.type)) {
       const { jobState } = await chrome.storage.session.get("jobState");
       if (!jobState || jobState.tabId !== sender.tab?.id) {
         return { error: "This tab does not own the extension job" };
       }
       if (message.type === "clearState") {
         await chrome.storage.session.remove("jobState");
+        return { ok: true };
+      }
+      if (message.type === "restartJournal") {
+        if (!jobState.directEntry || message.id !== jobState.job.id) {
+          return { error: "Cannot restart this extension job" };
+        }
+        const { token } = await chrome.storage.local.get("token");
+        const alive = await request(`/alive?id=${encodeURIComponent(jobState.job.id)}`, token);
+        if (!alive.active) return { error: "Local app job is no longer active" };
+        const tab = await chrome.tabs.create({ url: "about:blank", active: true });
+        await chrome.storage.session.set({
+          jobState: { job: jobState.job, stage: "journal", tabId: tab.id },
+        });
+        await chrome.tabs.update(tab.id, { url: JOURNAL });
         return { ok: true };
       }
       const state = message.state;

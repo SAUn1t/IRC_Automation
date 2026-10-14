@@ -6,7 +6,11 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 
-def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: Path):
+@pytest.mark.parametrize("start_at", ["journal", "ipr", "form"])
+@pytest.mark.parametrize("next_href", ["?page=2", "/irc/index/conclusions-school/page/2"])
+def test_extension_navigates_from_supported_page_and_fills_only_four_fields(
+    tmp_path: Path, start_at: str, next_href: str,
+):
     chromium = shutil.which("chromium") or shutil.which("google-chrome")
     if not chromium:
         pytest.skip("Chromium is not installed")
@@ -17,7 +21,14 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
         {"name": "parents_phones", "value": "000 000 000"},
     ]}
     messages = []
-    extension_state = {"value": {"job": job, "stage": "journal", "tabId": 42}}
+    ipr_url = "https://ircenter.gov.ua/irc/index/conclusion-iprs/conclusion_id/42"
+    form_url = "https://ircenter.gov.ua/irc/index/filling-ipr/ipr_id/99/conclusion_id/42"
+    initial = {"job": job, "stage": start_at, "tabId": 42}
+    if start_at == "ipr":
+        initial["conclusionUrl"] = ipr_url
+    if start_at == "form":
+        initial["formUrl"] = form_url
+    extension_state = {"value": initial}
 
     def row(name: str, number: int) -> str:
         return (f"<tr><td>1</td><td><a href='/irc/index/bid-view/bid_id/{number}'>{name}</a></td>"
@@ -27,10 +38,10 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
 
     def route_handler(route):
         url = urlparse(route.request.url)
-        if url.path == "/irc/index/conclusions-school":
-            second = parse_qs(url.query).get("page") == ["2"]
+        if url.path in ("/irc/index/conclusions-school", "/irc/index/conclusions-school/page/2"):
+            second = parse_qs(url.query).get("page") == ["2"] or url.path.endswith("/page/2")
             rows = row("Шевченко Іван Петрович", 42) if second else row("Петренко Іван Петрович", 10)
-            next_link = "" if second else "<div id='pagination-digg'><a href='?page=2'>Далі →</a></div>"
+            next_link = "" if second else f"<div id='pagination-digg'><a href='{next_href}'>Далі →</a></div>"
             body = f"<table class='zebra-stripe list'>{rows}</table>{next_link}"
         elif url.path == "/irc/index/conclusion-iprs/conclusion_id/42":
             body = ("<table class='zebra-stripe list'>"
@@ -76,11 +87,13 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
         context.add_init_script(
             "window.chrome = window.chrome || {}; "
-            "window.chrome.runtime = {sendMessage: message => window.testBridge(message)}; "
+            "window.chrome.runtime = {sendMessage: message => window.testBridge(message), "
+            "onMessage: {addListener: () => {}}}; "
             "window.addEventListener('DOMContentLoaded', () => {" + content + "}, {once: true});"
         )
         page = context.new_page()
-        page.goto("https://ircenter.gov.ua/irc/index/conclusions-school")
+        page.goto({"journal": "https://ircenter.gov.ua/irc/index/conclusions-school",
+                   "ipr": ipr_url, "form": form_url}[start_at])
         page.wait_for_url("**/irc/index/filling-ipr/ipr_id/99/conclusion_id/42", timeout=10000)
         expect(page.locator("[name='execution_period']")).to_have_value(job["fields"][0]["value"])
         expect(page.locator("[name='year_of_study']")).to_have_value("2")
@@ -88,4 +101,56 @@ def test_extension_navigates_paged_journal_and_fills_only_four_fields(tmp_path: 
         expect(page.locator("[name='parents_phones']")).to_have_value("000 000 000")
         assert [message["type"] for message in messages].count("claim") == 0
         assert any(message["type"] == "status" and message["status"] == "ready" for message in messages)
+        context.close()
+
+
+@pytest.mark.parametrize("start_at", ["ipr", "form"])
+def test_open_page_for_other_child_restarts_at_journal_without_filling(tmp_path: Path, start_at: str):
+    chromium = shutil.which("chromium") or shutil.which("google-chrome")
+    if not chromium:
+        pytest.skip("Chromium is not installed")
+    path = ("/irc/index/conclusion-iprs/conclusion_id/42" if start_at == "ipr"
+            else "/irc/index/filling-ipr/ipr_id/99/conclusion_id/42")
+    url = "https://ircenter.gov.ua" + path
+    job = {"id": "synthetic-job", "child": {"first": "Іван", "surname": "Шевченко"}}
+    state = {"job": job, "stage": start_at, "tabId": 42, "directEntry": True,
+             "conclusionUrl" if start_at == "ipr" else "formUrl": url}
+    messages = []
+    with sync_playwright() as playwright:
+        context = playwright.chromium.launch_persistent_context(
+            str(tmp_path / "profile"), executable_path=chromium, headless=True,
+        )
+        body = ("<table class='zebra-stripe list'><tr><td>Прізвище, ім'я, по батькові дитини</td>"
+                "<td>Петренко Олена Петрівна</td></tr></table>" if start_at == "ipr" else
+                "<div id='content-wrapper'><div class='nosidebar'>"
+                "<h1>Створення індивідуальної програми розвитку учня закладу загальної середньої освіти</h1>"
+                "<form id='iprForm'><p>прізвище, власне ім’я, по батькові(за наявності) "
+                "Петренко Олена Петрівна</p><input name='execution_period'></form></div></div>")
+        context.route(url, lambda route: route.fulfill(
+            status=200, content_type="text/html; charset=utf-8", body=body,
+        ))
+
+        def reply(_source, message):
+            messages.append(message)
+            if message["type"] == "getState":
+                return {"state": state}
+            if message["type"] == "alive":
+                return {"active": True}
+            return {"ok": True}
+
+        context.expose_binding("testBridge", reply)
+        content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
+        context.add_init_script(
+            "window.chrome = window.chrome || {}; "
+            "window.chrome.runtime = {sendMessage: message => {"
+            "if (message.type === 'restartJournal') window.__restarted = true; "
+            "return window.testBridge(message);}, onMessage: {addListener: () => {}}}; "
+            "window.addEventListener('DOMContentLoaded', () => {" + content + "}, {once: true});"
+        )
+        page = context.new_page()
+        page.goto(url)
+        page.wait_for_function("window.__restarted === true")
+        assert page.url == url
+        assert any(message["type"] == "restartJournal" for message in messages)
+        assert not any(message["type"] == "status" and message["status"] == "ready" for message in messages)
         context.close()

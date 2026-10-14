@@ -10,10 +10,14 @@
     return same(words[0], child.surname) && same(words[1], child.first);
   }
 
-  function checkedUrl(href, pattern, allowQuery = false) {
-    const url = new URL(href, location.href);
-    if (url.origin !== SITE || !pattern.test(url.pathname) || (!allowQuery && url.search) || url.hash) {
-      throw new Error("Portal link does not match the expected route");
+  function checkedUrl(href, pattern, base = location.href, allowPageQuery = false) {
+    const url = new URL(href, base);
+    const pageQuery = allowPageQuery && [...url.searchParams.keys()].length === 1 &&
+      /^\d+$/.test(url.searchParams.get("page") || "");
+    if (url.origin !== SITE || !pattern.test(url.pathname) ||
+        (url.search && !pageQuery) || url.hash) {
+      throw new Error("Portal link does not match the expected route: " +
+        url.pathname.replace(/\d+/g, ":n"));
     }
     return url;
   }
@@ -27,6 +31,12 @@
   async function report(state, status, detail) {
     const reply = await chrome.runtime.sendMessage({ type: "status", id: state.job.id, status, detail });
     if (reply?.error) throw new Error("Local app connection was lost");
+  }
+
+  async function restartFromJournal(state) {
+    const reply = await chrome.runtime.sendMessage({ type: "restartJournal", id: state.job.id });
+    if (reply?.error) throw new Error("Could not continue from the conclusions journal");
+    await report(state, "progress", "Open page belongs to another child; searching the journal");
   }
 
   async function waitFor(selector, timeout = 15000) {
@@ -43,7 +53,7 @@
     throw new Error("Expected portal content did not appear");
   }
 
-  function journalPage(doc, job, matches) {
+  function journalPage(doc, pageUrl, job, matches) {
     const table = doc.querySelector("table.zebra-stripe.list");
     if (!table) throw new Error("Conclusions journal table is missing");
     for (const row of table.querySelectorAll("tr")) {
@@ -53,14 +63,16 @@
       if (fullNameMatches(nameLink.textContent, job.child)) {
         const iprLink = row.cells[7].querySelector("a[href]");
         if (!iprLink) throw new Error("Matching journal row has no IPR link");
-        matches.push(checkedUrl(iprLink.getAttribute("href"), /^\/irc\/index\/conclusion-iprs\/conclusion_id\/\d+$/));
+        matches.push(checkedUrl(iprLink.getAttribute("href"),
+          /^\/irc\/index\/conclusion-iprs\/conclusion_id\/\d+$/, pageUrl));
       }
     }
     const nextLinks = [...doc.querySelectorAll("#pagination-digg a[href]")]
       .filter(link => normalize(link.textContent).startsWith("Далі"));
     if (nextLinks.length > 1) throw new Error("Journal pagination is ambiguous");
     return nextLinks.length
-      ? checkedUrl(nextLinks[0].getAttribute("href"), /^\/irc\/index\/conclusions-school$/, true) : null;
+      ? checkedUrl(nextLinks[0].getAttribute("href"),
+        /^\/irc\/index\/conclusions-school(?:\/page\/[1-9]\d*)?\/?$/, pageUrl, true) : null;
   }
 
   async function processJournal(state) {
@@ -73,7 +85,7 @@
     for (let count = 0; count < 100; count++) {
       if (visited.has(url.href)) throw new Error("Journal pagination loops");
       visited.add(url.href);
-      const next = journalPage(doc, state.job, matches);
+      const next = journalPage(doc, url.href, state.job, matches);
       if (!next) break;
       if (count === 99) throw new Error("Journal exceeds 100 pages");
       const response = await fetch(next.href, { credentials: "include", cache: "no-store" });
@@ -96,7 +108,11 @@
     await waitFor("table.zebra-stripe.list");
     const identity = [...document.querySelectorAll("table.zebra-stripe.list tr")]
       .find(row => row.cells.length >= 2 && normalize(row.cells[0].textContent) === "Прізвище, ім'я, по батькові дитини");
-    if (!identity || !fullNameMatches(identity.cells[1].textContent, state.job.child)) {
+    if (!identity) {
+      throw new Error("IPR page child identity is missing");
+    }
+    if (!fullNameMatches(identity.cells[1].textContent, state.job.child)) {
+      if (state.directEntry) return restartFromJournal(state);
       throw new Error("IPR page child identity does not match");
     }
     const top = [...document.querySelectorAll("a.add-link.with-icon[href^='/irc/index/filling-ipr/conclusion_id/']")];
@@ -127,7 +143,11 @@
     const names = [...form.querySelectorAll("p")].map(p => normalize(p.textContent))
       .map(text => text.match(/^прізвище,\s*власне ім[’ʼ']я,\s*по батькові\s*\(за наявності\)\s+(.+)$/i))
       .filter(Boolean);
-    if (names.length !== 1 || !fullNameMatches(names[0][1], state.job.child)) {
+    if (names.length !== 1) {
+      throw new Error("IPR form child identity is missing");
+    }
+    if (!fullNameMatches(names[0][1], state.job.child)) {
+      if (state.directEntry) return restartFromJournal(state);
       throw new Error("IPR form child identity does not match");
     }
     const expected = new Set(["execution_period", "year_of_study", "child_grade", "parents_phones"]);
@@ -154,7 +174,11 @@
     await report(state, "ready", "Four fields filled and read back; review remaining sections manually");
   }
 
+  let running = false;
+  let pendingStart = false;
   async function run() {
+    if (running) { pendingStart = true; return; }
+    running = true;
     let state;
     try {
       state = (await chrome.runtime.sendMessage({ type: "getState" }))?.state || null;
@@ -174,8 +198,20 @@
           type: "status", id: state.job.id, status: "error", detail: error.message || "Portal automation stopped",
         }).catch(() => {});
       }
+    } finally {
+      running = false;
+      if (pendingStart) {
+        pendingStart = false;
+        run();
+      }
     }
   }
 
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message.type === "start") {
+      run();
+      sendResponse({ ok: true });
+    }
+  });
   run();
 })();

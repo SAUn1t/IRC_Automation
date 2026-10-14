@@ -5,6 +5,7 @@ const vm = require("node:vm");
 const listeners = {};
 const storage = { local: { token: "test-token" }, session: {} };
 const tabs = [];
+const starts = [];
 const requests = [];
 const chrome = {
   runtime: {
@@ -26,6 +27,9 @@ const chrome = {
     },
   },
   tabs: {
+    query: async () => [],
+    sendMessage: async (id, message) => { starts.push({ id, message }); },
+    reload: async () => { throw new Error("Unexpected reload"); },
     create: async options => {
       const tab = { id: 7, ...options };
       tabs.push(tab);
@@ -49,9 +53,9 @@ async function fetch(url, options) {
 const source = fs.readFileSync("chrome_extension/background.js", "utf8");
 vm.runInNewContext(source, { chrome, fetch, URL, encodeURIComponent });
 
-function message(type, tabId) {
+function message(type, tabId, extra = {}) {
   return new Promise(resolve => {
-    listeners.message({ type }, { id: chrome.runtime.id, tab: { id: tabId } }, resolve);
+    listeners.message({ type, ...extra }, { id: chrome.runtime.id, tab: { id: tabId } }, resolve);
   });
 }
 
@@ -68,5 +72,57 @@ function message(type, tabId) {
   assert.equal((await message("getState", 7)).state.job.id, "job-1");
   assert.equal((await message("clearState", 8)).error, "This tab does not own the extension job");
   assert.equal(storage.session.jobState.job.id, "job-1");
+
+  await message("clearState", 7);
+  chrome.tabs.query = async () => [{
+    id: 8, url: "https://ircenter.gov.ua/irc/index/conclusion-iprs/conclusion_id/42",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "ipr");
+  assert.equal(storage.session.jobState.directEntry, true);
+  assert.equal(storage.session.jobState.conclusionUrl,
+    "https://ircenter.gov.ua/irc/index/conclusion-iprs/conclusion_id/42");
+  assert.equal(starts[0].id, 8);
+  assert.equal(starts[0].message.type, "start");
+  assert.equal(tabs.length, 1);
+
+  await message("clearState", 8);
+  chrome.tabs.query = async () => [{
+    id: 9, url: "https://ircenter.gov.ua/irc/index/filling-ipr/ipr_id/99/conclusion_id/42",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "form");
+  assert.equal(storage.session.jobState.tabId, 9);
+  assert.equal(starts[1].id, 9);
+  assert.equal(starts[1].message.type, "start");
+  assert.equal(tabs.length, 1);
+
+  assert.equal((await message("restartJournal", 8, { id: "job-1" })).error,
+    "This tab does not own the extension job");
+  assert.equal((await message("restartJournal", 9, { id: "job-1" })).ok, true);
+  assert.equal(storage.session.jobState.stage, "journal");
+  assert.equal(tabs.length, 2);
+
+  await message("clearState", 7);
+  chrome.tabs.query = async () => [{
+    id: 10, url: "https://ircenter.gov.ua/irc/index/conclusions-school",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "journal");
+  assert.equal(storage.session.jobState.tabId, 10);
+  assert.equal(starts[2].id, 10);
+  assert.equal(tabs.length, 2);
+
+  await message("clearState", 10);
+  chrome.tabs.query = async () => [{
+    id: 11, url: "https://ircenter.gov.ua/irc/index/conclusions-search",
+  }];
+  listeners.alarm({ name: "ircenter-job-poll" });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(storage.session.jobState.stage, "journal");
+  assert.equal(tabs.length, 3);
   console.log("extension background handoff passed");
 })().catch(error => { console.error(error); process.exitCode = 1; });
