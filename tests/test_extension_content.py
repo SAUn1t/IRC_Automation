@@ -37,15 +37,17 @@ def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, 
     <table><tr><td>Доступність</td><td><textarea name='5[1][1]'></textarea></td></tr></table>
     <input type='radio' name='5[26][1]' value='1' checked>
     <input type='radio' name='5[26][1]' value='0'>
-    <table id='sec529table'><tr class='sec529tr'><td><textarea name='5[29][1]'></textarea></td></tr></table>
+    <table id='sec529table'><tr><th>Найменування навчального предмета</th></tr>
+      <tr class='sec529tr'><td><textarea name='5[29][1]'></textarea></td></tr></table>
     <a href='javascript: addSection5Row29();'>Додати предмет</a>
-    <table id='sec61table'><tr class='sec61tr'><td><textarea name='6[1][1]'></textarea></td></tr></table>
+    <table id='sec61table'><tr><th>Освітня галузь</th></tr>
+      <tr class='sec61tr'><td><textarea name='6[1][1]'></textarea></td></tr></table>
     <a href='javascript: addSection6Row1();'>Додати напрям</a>
     <input type='checkbox' name='8[7][1]' checked>
     <input type='checkbox' name='8[9][0]' checked>
     </form></div></div>
     <script>function addSection5Row29() { document.querySelector('#sec529table').insertAdjacentHTML(
-      'beforeend', '<tr class="sec529tr"><td><textarea name="5[30][1]"></textarea></td></tr>'); }
+      'beforeend', '<tr class="sec529tr"><td><textarea name="5[31][1]"></textarea></td></tr>'); }
     </script>"""
     with sync_playwright() as playwright:
         context = playwright.chromium.launch_persistent_context(
@@ -76,7 +78,7 @@ def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, 
             context.close()
             return
         assert not any(message.get("status") == "error" for message in messages), messages
-        expect(page.locator("[name='5[30][1]']")).to_have_value("Читання")
+        expect(page.locator("[name='5[31][1]']")).to_have_value("Читання")
         expect(page.locator("[name='5[1][1]']")).to_have_value("Тихий кабінет")
         expect(page.locator("[name='5[26][1]'][value='0']")).to_be_checked()
         expect(page.locator("[name='8[7][1]']")).not_to_be_checked()

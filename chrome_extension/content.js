@@ -1,7 +1,7 @@
 (() => {
   const SITE = "https://ircenter.gov.ua";
   const JOURNAL = "/irc/index/conclusions-school";
-  const CONTENT_VERSION = "1.3.0";
+  const CONTENT_VERSION = "1.3.1";
   const normalize = value => String(value || "").normalize("NFC").replace(/\s+/g, " ").trim();
   const same = (left, right) => normalize(left).toLocaleLowerCase("uk") === normalize(right).toLocaleLowerCase("uk");
 
@@ -48,7 +48,7 @@
     await report(state, "progress", "Open page belongs to another child; searching the journal");
   }
 
-  async function waitFor(selector, timeout = 15000) {
+  async function waitFor(selector, timeout = 15000, description = "portal content") {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
       const element = document.querySelector(selector);
@@ -59,7 +59,8 @@
         document.body?.textContent?.includes("Performing security verification")) {
       throw new Error("Cloudflare verification did not finish in this Chrome profile");
     }
-    throw new Error("Expected portal content did not appear");
+    const route = location.pathname.replace(/\d+/g, ":n");
+    throw new Error(`${description} did not appear at ${route}`);
   }
 
   function journalPage(doc, pageUrl, job, matches) {
@@ -98,7 +99,7 @@
     if (pageNumber !== (state.journalNextPage || 1) || state.journalVisited.includes(pageNumber)) {
       throw new Error("Journal pagination changed or looped");
     }
-    await waitFor("table.zebra-stripe.list", 60000);
+    await waitFor("table.zebra-stripe.list", 60000, "Conclusions journal table");
     const next = journalPage(document, url.href, state.job, state.journalMatches);
     state.journalVisited.push(pageNumber);
     if (state.journalMatches.length > 1) throw new Error("Expected exactly one child match in the journal");
@@ -126,7 +127,7 @@
 
   async function processIpr(state) {
     if (location.href !== state.conclusionUrl) throw new Error("Opened IPR page does not match the journal link");
-    await waitFor("table.zebra-stripe.list");
+    await waitFor("table.zebra-stripe.list", 30000, "Child IPR overview table");
     const identity = [...document.querySelectorAll("table.zebra-stripe.list tr")]
       .find(row => row.cells.length >= 2 && normalize(row.cells[0].textContent) === "Прізвище, ім'я, по батькові дитини");
     if (!identity) {
@@ -155,7 +156,7 @@
 
   async function processForm(state) {
     if (location.href !== state.formUrl) throw new Error("Opened IPR form has a different address");
-    const form = await waitFor("form#iprForm");
+    const form = await waitFor("form#iprForm", 30000, "School IPR form");
     const heading = document.querySelector("#content-wrapper .nosidebar > h1");
     if (!heading || normalize(heading.textContent) !==
       "Створення індивідуальної програми розвитку учня закладу загальної середньої освіти") {
@@ -171,6 +172,7 @@
       if (state.directEntry) return restartFromJournal(state);
       throw new Error("IPR form child identity does not match");
     }
+    await report(state, "progress", "Matching IPR form confirmed; preparing mapped rows");
     const required = new Set(["execution_period", "year_of_study", "child_grade", "parents_phones"]);
     const allowed = /^(?:execution_period|year_of_study|child_grade|parents_phones|parent_address|child_enrollment_date|protocol_date|protocol_month|protocol_year|protocol_number|supportLevel|footer_parents_names|3\[1\]\[1\]|5\[(?:[1-9]|1\d|2[0-8])\]\[[12]\]|5\[(?:29|[3-9]\d)\]\[[123]\]|6\[(?:[1-9]|[1-4]\d)\]\[[1-5]\]|7\[(?:[1-9]|[1-4]\d)\]\[[1-4]\]|8\[[1-9]\]\[[01]\]|9\[1\]\[1\]|10\[(?:[1-9]|[1-4]\d)\]\[[12]\])$/;
     const fields = state.job.fields;
@@ -182,36 +184,58 @@
     for (const field of fields) required.delete(field.name);
     if (required.size) throw new Error("App omitted a required field mapping");
     const dynamic = [
-      { prefix: "5", start: 29, selector: "#sec529table", row: "sec529tr", add: "addSection5Row29" },
-      { prefix: "6", start: 1, selector: "#sec61table", row: "sec61tr", add: "addSection6Row1" },
-      { prefix: "7", start: 1, selector: "#sec71table", row: "sec71tr", add: "addSection7Row1" },
-      { prefix: "10", start: 1, selector: "#sec101table", row: "sec101tr", add: "addSection10Row1" },
+      { prefix: "5", start: 29, selector: "#sec529table", row: "sec529tr", add: "addSection5Row29",
+        label: "Найменування навчального предмета" },
+      { prefix: "6", start: 1, selector: "#sec61table", row: "sec61tr", add: "addSection6Row1",
+        label: "Освітня галузь" },
+      { prefix: "7", start: 1, selector: "#sec71table", row: "sec71tr", add: "addSection7Row1",
+        label: "Найменування заняття" },
+      { prefix: "10", start: 1, selector: "#sec101table", row: "sec101tr", add: "addSection10Row1",
+        label: "Прізвище, власне ім’я" },
     ];
+    const dynamicRows = new Map();
     for (const spec of dynamic) {
       const rowNumbers = fields.map(field => field.name.match(new RegExp(`^${spec.prefix}\\[(\\d+)\\]`)))
         .filter(match => match && Number(match[1]) >= spec.start).map(match => Number(match[1]));
       if (!rowNumbers.length) continue;
       const table = form.querySelector(spec.selector);
       const add = form.querySelector(`a[href="javascript: ${spec.add}();"]`);
-      if (!table || !add || !table.querySelector(`tr.${spec.row}`)) {
+      if (!table || !add || !table.querySelector(`tr.${spec.row}`) ||
+          !normalize(table.querySelector("tr")?.cells[0]?.textContent).startsWith(spec.label)) {
         throw new Error("A mapped IPR table has changed");
       }
+      const actualNumbers = new Set();
       for (let index = spec.start; index <= Math.max(...rowNumbers); index++) {
         let rows = [...table.querySelectorAll(`tr.${spec.row}`)];
         if (rows.length < index - spec.start + 1) {
+          const before = rows.length;
           add.click();
-          await waitFor(`${spec.selector} [name="${spec.prefix}[${index}][1]"]`, 3000);
-          rows = [...table.querySelectorAll(`tr.${spec.row}`)];
+          const deadline = Date.now() + 10000;
+          while (Date.now() < deadline) {
+            rows = [...table.querySelectorAll(`tr.${spec.row}`)];
+            if (rows.length > before) break;
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
         }
-        if (rows.length < index - spec.start + 1 ||
-            !rows[index - spec.start].querySelector(`[name^="${spec.prefix}[${index}]"]`)) {
-          throw new Error(`Could not add mapped IPR table row ${spec.prefix}[${index}]`);
+        const row = rows[index - spec.start];
+        const first = [...(row?.querySelectorAll("input[name], select[name], textarea[name]") || [])]
+          .map(control => control.name.match(new RegExp(`^${spec.prefix}\\[(\\d+)\\]\\[1\\]$`)))
+          .find(Boolean);
+        if (!row || !first || actualNumbers.has(first[1])) {
+          throw new Error(`Portal did not add a usable row in ${spec.selector.slice(1)}`);
         }
+        actualNumbers.add(first[1]);
+        dynamicRows.set(`${spec.prefix}[${index}]`, row);
       }
     }
     const resolved = fields.map(field => {
-      const controls = [...form.querySelectorAll("input[name], select[name], textarea[name]")]
-        .filter(control => control.name === field.name);
+      const tableField = field.name.match(/^(5|6|7|10)\[(\d+)\]\[(\d+)\]$/);
+      const dynamicRow = tableField && dynamicRows.get(`${tableField[1]}[${tableField[2]}]`);
+      const controls = dynamicRow
+        ? [...dynamicRow.querySelectorAll("input[name], select[name], textarea[name]")]
+          .filter(item => new RegExp(`^${tableField[1]}\\[\\d+\\]\\[${tableField[3]}\\]$`).test(item.name))
+        : [...form.querySelectorAll("input[name], select[name], textarea[name]")]
+          .filter(item => item.name === field.name);
       let control;
       const kind = field.kind || (field.name === "year_of_study" ? "select" : "text");
       if (kind === "radio") control = controls.find(item => item.type === "radio" && item.value === field.value);
