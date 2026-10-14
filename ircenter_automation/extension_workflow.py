@@ -23,9 +23,13 @@ class ExtensionWorkflow:
 
     def run(self, raw_name: str) -> str:
         guide = prepare_manual_entry(self.settings, raw_name)
+        field_count = len(guide.portal_fields or guide.fields)
+        warnings = ["Review every filled field and complete any missing IPR sections manually."]
+        if guide.portal_fields and not any(field.name == "9[1][1]" for field in guide.portal_fields):
+            warnings.append("Section 9 has no selected DOCX answer; check the portal's default before generating.")
         summary = ReviewSummary(
-            guide.child_name, guide.document_name, len(guide.fields), len(guide.fields),
-            ("Only four exact fields were transferred. Review and complete the remaining IPR sections manually.",),
+            guide.child_name, guide.document_name, field_count, field_count,
+            tuple(warnings),
         )
         with ExtensionBridge(self.settings.extension_token, guide) as bridge:
             self.on_status("Waiting for the extension in your signed-in Chrome profile to open the portal.")
@@ -41,7 +45,7 @@ class ExtensionWorkflow:
                     self.on_status(detail)
                     if kind == "ready":
                         self.on_review(summary)
-                        return "MANUAL REVIEW — four fields filled in Chrome; no document submitted by the app"
+                        return f"MANUAL REVIEW — {field_count} fields filled in Chrome; no document submitted by the app"
                 elif time.monotonic() >= reminder_at:
                     self.on_status(
                         "Still waiting for Chrome. Keep your usual Chrome profile open and check "

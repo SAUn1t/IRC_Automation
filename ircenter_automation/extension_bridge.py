@@ -28,7 +28,10 @@ class ExtensionBridge:
         self.job = {
             "id": self.job_id,
             "child": {"first": first, "surname": surname},
-            "fields": [{"name": field.portal_name, "value": field.value} for field in guide.fields],
+            "fields": ([{"name": field.name, "value": field.value, "kind": field.kind,
+                         "rowLabel": field.row_label} for field in guide.portal_fields]
+                       if guide.portal_fields else
+                       [{"name": field.portal_name, "value": field.value} for field in guide.fields]),
         }
         self.statuses: queue.Queue[tuple[str, str]] = queue.Queue()
         self._claimed = False

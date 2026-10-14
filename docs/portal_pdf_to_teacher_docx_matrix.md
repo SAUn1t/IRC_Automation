@@ -1,6 +1,6 @@
 # Portal IPR PDF ↔ teacher DOCX field matrix
 
-This compares the supplied **13-section portal PDF (2025–2026)** with the supplied **11-section teacher DOCX (2026–2027)** and the observed portal form HTML. The PDF is a completed prior-year IPR, so its values are evidence of the portal's output layout, **not** values to copy into the new form. This file records field locations and transfer rules, without personal values.
+This historical comparison covers the supplied **13-section portal PDF (2025–2026)** and **11-section teacher DOCX (2026–2027)**. The current “Створення ІПР для ЗЗСО” HTML is an **11-section form** and is mapped separately in [current template compatibility](template_compatibility.md). The PDF is a completed prior-year IPR, so its values are evidence of the old output layout, **not** values to copy into the new form. This file records field locations and transfer rules, without personal values.
 
 **Legend:** `Exact` = same meaning and a uniquely readable DOCX value; `Conditional` = an analog exists, but a choice, note, or transformation needs confirmation; `Manual` = related content, but not equivalent; `Absent` = no DOCX source. Only `Exact` fields may be filled automatically, followed by read-back and manual review. Blank choices remain blank; they must never be interpreted as “Ні”.
 

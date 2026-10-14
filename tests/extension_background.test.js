@@ -12,11 +12,11 @@ const tabs = [];
 const starts = [];
 const reloadedTabs = [];
 const requests = [];
-let contentVersion = "1.2.2";
+let contentVersion = "1.3.0";
 const chrome = {
   runtime: {
     id: "test-extension-id",
-    getManifest: () => ({ version: "1.2.2" }),
+    getManifest: () => ({ version: "1.3.0" }),
     reload: () => { throw new Error("Unexpected extension reload"); },
     onInstalled: { addListener: fn => { listeners.installed = fn; } },
     onStartup: { addListener: fn => { listeners.startup = fn; } },
@@ -59,7 +59,7 @@ const chrome = {
 async function fetch(url, options) {
   requests.push({ url, options });
   if (url.endsWith("/version")) {
-    return { ok: true, json: async () => ({ extensionVersion: "1.2.2" }) };
+    return { ok: true, json: async () => ({ extensionVersion: "1.3.0" }) };
   }
   if (url.endsWith("/job")) {
     return { ok: true, json: async () => ({ job: { id: "job-1" } }) };
@@ -83,7 +83,7 @@ function message(type, tabId, extra = {}) {
   assert.equal(tabs[0].url, "https://ircenter.gov.ua/irc/index/conclusions-school");
   assert.equal(storage.session.jobState.tabId, 7);
   assert.equal(requests[0].options.headers.Authorization, "Bearer test-token");
-  assert.equal(requests[0].options.headers["X-IRCenter-Extension-Version"], "1.2.2");
+  assert.equal(requests[0].options.headers["X-IRCenter-Extension-Version"], "1.3.0");
   assert.equal(requests[2].options.headers.Authorization, "Bearer test-token");
   assert.equal(JSON.parse(requests[2].options.body).type, "progress");
   assert.equal((await message("getState", 8)).state, null);
@@ -191,7 +191,7 @@ function message(type, tabId, extra = {}) {
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);
-  assert.equal(storage.local.attemptedReloadVersion, "1.2.2");
+  assert.equal(storage.local.attemptedReloadVersion, "1.3.0");
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);

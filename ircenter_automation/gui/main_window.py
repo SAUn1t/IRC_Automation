@@ -14,6 +14,7 @@ from .. import __version__
 from ..errors import WorkflowError
 from ..extension_workflow import ExtensionWorkflow
 from ..manual_entry import prepare_manual_entry
+from ..school_ipr_2026 import extract_portal_fields
 from ..normalization import comparison_key, parse_child_name, resolve_two_word_name
 from ..settings import load_settings
 from ..updater import Release, UpdateError, check_for_update, download_update, launch_update
@@ -336,8 +337,11 @@ class MainWindow(QMainWindow):
             parsed = parse_document(path)
             if layout.startswith("11-section school IPR"):
                 child = resolve_two_word_name(child, parsed.fields[comparison_key("docx_child_full_name")])
-                self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLayout: {layout}\nExact scalar candidates: {len(parsed.fields) - 1}")
-                self.status_panel.append("Only exact scalar fields can be transferred automatically. All remaining IPR sections need manual review.")
+                base = {name: parsed.fields[comparison_key(name)] for name in
+                        ("execution_period", "year_of_study", "child_grade", "parents_phones")}
+                candidates = extract_portal_fields(path, base)
+                self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLayout: {layout}\nMatching populated controls: {len(candidates)}")
+                self.status_panel.append("Matching fields can be filled in Chrome. Review the complete form before generating the document.")
                 return
             self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLabels parsed: {len(parsed.fields)}")
             self.status_panel.append("DOCX parsed locally. Configure real site selectors and field mapping before Process can fill a form.")

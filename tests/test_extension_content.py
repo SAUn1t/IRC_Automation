@@ -6,6 +6,85 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 
+@pytest.mark.parametrize("row_label", ["Доступність", "Невірний підпис"])
+def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, row_label: str):
+    chromium = shutil.which("chromium") or shutil.which("google-chrome")
+    if not chromium:
+        pytest.skip("Chromium is not installed")
+    url = "https://ircenter.gov.ua/irc/index/filling-ipr/conclusion_id/42"
+    fields = [
+        {"name": "execution_period", "value": "з 01.09.2026 по 31.05.2027", "kind": "text"},
+        {"name": "year_of_study", "value": "2", "kind": "select"},
+        {"name": "child_grade", "value": "2-А", "kind": "text"},
+        {"name": "parents_phones", "value": "000 000 000", "kind": "text"},
+        {"name": "5[1][1]", "value": "Тихий кабінет", "kind": "textarea", "rowLabel": row_label},
+        {"name": "5[26][1]", "value": "0", "kind": "radio"},
+        {"name": "5[29][1]", "value": "Математика", "kind": "textarea"},
+        {"name": "5[30][1]", "value": "Читання", "kind": "textarea"},
+        {"name": "6[1][1]", "value": "Мовна галузь", "kind": "textarea"},
+        {"name": "8[7][1]", "value": "false", "kind": "checkbox"},
+        {"name": "8[9][0]", "value": "false", "kind": "checkbox"},
+    ]
+    state = {"job": {"id": "synthetic-job", "child": {"first": "Іван", "surname": "Шевченко"},
+                     "fields": fields}, "stage": "form", "formUrl": url}
+    messages = []
+    html = """<div id='content-wrapper'><div class='nosidebar'>
+    <h1>Створення індивідуальної програми розвитку учня закладу загальної середньої освіти</h1>
+    <form id='iprForm'>
+    <p>прізвище, власне ім’я, по батькові (за наявності) Шевченко Іван Петрович</p>
+    <input name='execution_period'><select name='year_of_study'><option>1</option><option>2</option></select>
+    <input name='child_grade'><input name='parents_phones'>
+    <table><tr><td>Доступність</td><td><textarea name='5[1][1]'></textarea></td></tr></table>
+    <input type='radio' name='5[26][1]' value='1' checked>
+    <input type='radio' name='5[26][1]' value='0'>
+    <table id='sec529table'><tr class='sec529tr'><td><textarea name='5[29][1]'></textarea></td></tr></table>
+    <a href='javascript: addSection5Row29();'>Додати предмет</a>
+    <table id='sec61table'><tr class='sec61tr'><td><textarea name='6[1][1]'></textarea></td></tr></table>
+    <a href='javascript: addSection6Row1();'>Додати напрям</a>
+    <input type='checkbox' name='8[7][1]' checked>
+    <input type='checkbox' name='8[9][0]' checked>
+    </form></div></div>
+    <script>function addSection5Row29() { document.querySelector('#sec529table').insertAdjacentHTML(
+      'beforeend', '<tr class="sec529tr"><td><textarea name="5[30][1]"></textarea></td></tr>'); }
+    </script>"""
+    with sync_playwright() as playwright:
+        context = playwright.chromium.launch_persistent_context(
+            str(tmp_path / "profile"), executable_path=chromium, headless=True)
+        context.route(url, lambda route: route.fulfill(status=200, content_type="text/html; charset=utf-8", body=html))
+
+        def reply(_source, message):
+            messages.append(message)
+            if message["type"] == "getState":
+                return {"state": state}
+            if message["type"] == "alive":
+                return {"active": True}
+            return {"ok": True}
+
+        context.expose_binding("testBridge", reply)
+        content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
+        context.add_init_script(
+            "window.chrome = {runtime: {sendMessage: message => window.testBridge(message), "
+            "onMessage: {addListener: () => {}}}}; "
+            "window.addEventListener('DOMContentLoaded', () => {" + content + "}, {once: true});")
+        page = context.new_page()
+        page.goto(url)
+        page.wait_for_timeout(300)
+        if row_label != "Доступність":
+            assert any(message.get("status") == "error" and "row label changed" in message.get("detail", "")
+                       for message in messages)
+            expect(page.locator("[name='execution_period']")).to_have_value("")
+            context.close()
+            return
+        assert not any(message.get("status") == "error" for message in messages), messages
+        expect(page.locator("[name='5[30][1]']")).to_have_value("Читання")
+        expect(page.locator("[name='5[1][1]']")).to_have_value("Тихий кабінет")
+        expect(page.locator("[name='5[26][1]'][value='0']")).to_be_checked()
+        expect(page.locator("[name='8[7][1]']")).not_to_be_checked()
+        expect(page.locator("[name='8[9][0]']")).not_to_be_checked()
+        assert any(message.get("status") == "ready" for message in messages)
+        context.close()
+
+
 @pytest.mark.parametrize("start_at,next_href,duplicate,top_create", [
     (start_at, next_href, False, False)
     for start_at in ("journal", "journal-page-2", "ipr", "form")

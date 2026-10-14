@@ -7,6 +7,7 @@ from .documents import find_document, parse_document
 from .errors import DocumentParsingError
 from .normalization import comparison_key, parse_child_name, resolve_two_word_name
 from .settings import Settings
+from .school_ipr_2026 import PortalField, extract_portal_fields
 
 
 @dataclass(frozen=True)
@@ -21,6 +22,7 @@ class ManualEntryGuide:
     child_name: str
     document_name: str
     fields: tuple[ManualField, ...]
+    portal_fields: tuple[PortalField, ...] = ()
 
 
 _EXACT_FIELDS = (
@@ -42,4 +44,5 @@ def prepare_manual_entry(settings: Settings, raw_name: str) -> ManualEntryGuide:
         ManualField(label, portal_name, parsed.fields[comparison_key(portal_name)])
         for label, portal_name in _EXACT_FIELDS
     )
-    return ManualEntryGuide(child.display, path.name, fields)
+    base = {field.portal_name: field.value for field in fields}
+    return ManualEntryGuide(child.display, path.name, fields, extract_portal_fields(path, base))

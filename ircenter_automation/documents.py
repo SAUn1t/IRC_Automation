@@ -42,7 +42,7 @@ def inspect_document(path: Path) -> str:
     paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
     if (any(p.startswith("5. Створення інклюзивного освітнього середовища") for p in paragraphs)
             and any(p.startswith("11. Погодження індивідуальної програми розвитку") for p in paragraphs)):
-        return "11-section school IPR; portal form uses a different 13-section layout"
+        return "11-section school IPR; matches the current 11-section portal form"
     return "generic label/value DOCX"
 
 
