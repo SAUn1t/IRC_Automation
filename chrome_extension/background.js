@@ -141,7 +141,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
 schedulePolling();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  const allowed = ["alive", "status", "getState", "setState", "clearState", "pollNow", "restartJournal"];
+  const allowed = ["alive", "status", "getState", "setState", "clearState", "pollNow", "restartJournal", "addIprRow"];
   if (sender.id !== chrome.runtime.id || !allowed.includes(message.type)) return false;
   (async () => {
     if (message.type === "pollNow") {
@@ -151,6 +151,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === "getState") {
       const { jobState } = await chrome.storage.session.get("jobState");
       return { state: jobState?.tabId === sender.tab?.id ? jobState : null };
+    }
+    if (message.type === "addIprRow") {
+      const { jobState } = await chrome.storage.session.get("jobState");
+      const functions = new Set(["addSection5Row29", "addSection6Row1", "addSection7Row1", "addSection10Row1"]);
+      if (!jobState || jobState.stage !== "form" || jobState.tabId !== sender.tab?.id ||
+          jobState.job.id !== message.id || !functions.has(message.name) ||
+          (sender.url || sender.tab.url) !== jobState.formUrl) {
+        return { error: "This form cannot add the requested row" };
+      }
+      try {
+        const [injection] = await chrome.scripting.executeScript({
+          target: { tabId: sender.tab.id }, world: "MAIN", args: [message.name],
+          func: name => {
+            try {
+              if (typeof window[name] !== "function") return { error: "Portal row function is unavailable" };
+              window[name]();
+              return { ok: true };
+            } catch (_) {
+              return { error: "Portal row function failed" };
+            }
+          },
+        });
+        return injection?.result || { error: "Portal row function returned no result" };
+      } catch (_) {
+        return { error: "Chrome could not run the portal row function" };
+      }
     }
     if (["setState", "clearState", "restartJournal"].includes(message.type)) {
       const { jobState } = await chrome.storage.session.get("jobState");

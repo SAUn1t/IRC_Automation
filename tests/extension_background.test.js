@@ -12,11 +12,12 @@ const tabs = [];
 const starts = [];
 const reloadedTabs = [];
 const requests = [];
-let contentVersion = "1.3.1";
+const injections = [];
+let contentVersion = "1.3.2";
 const chrome = {
   runtime: {
     id: "test-extension-id",
-    getManifest: () => ({ version: "1.3.1" }),
+    getManifest: () => ({ version: "1.3.2" }),
     reload: () => { throw new Error("Unexpected extension reload"); },
     onInstalled: { addListener: fn => { listeners.installed = fn; } },
     onStartup: { addListener: fn => { listeners.startup = fn; } },
@@ -54,12 +55,18 @@ const chrome = {
       Object.assign(tabs.find(tab => tab.id === id), options);
     },
   },
+  scripting: {
+    executeScript: async options => {
+      injections.push(options);
+      return [{ result: { ok: true } }];
+    },
+  },
 };
 
 async function fetch(url, options) {
   requests.push({ url, options });
   if (url.endsWith("/version")) {
-    return { ok: true, json: async () => ({ extensionVersion: "1.3.1" }) };
+    return { ok: true, json: async () => ({ extensionVersion: "1.3.2" }) };
   }
   if (url.endsWith("/job")) {
     return { ok: true, json: async () => ({ job: { id: "job-1" } }) };
@@ -70,9 +77,9 @@ async function fetch(url, options) {
 const source = fs.readFileSync("chrome_extension/background.js", "utf8");
 vm.runInNewContext(source, { chrome, fetch, URL, encodeURIComponent });
 
-function message(type, tabId, extra = {}) {
+function message(type, tabId, extra = {}, url = "") {
   return new Promise(resolve => {
-    listeners.message({ type, ...extra }, { id: chrome.runtime.id, tab: { id: tabId } }, resolve);
+    listeners.message({ type, ...extra }, { id: chrome.runtime.id, tab: { id: tabId, url } }, resolve);
   });
 }
 
@@ -83,7 +90,7 @@ function message(type, tabId, extra = {}) {
   assert.equal(tabs[0].url, "https://ircenter.gov.ua/irc/index/conclusions-school");
   assert.equal(storage.session.jobState.tabId, 7);
   assert.equal(requests[0].options.headers.Authorization, "Bearer test-token");
-  assert.equal(requests[0].options.headers["X-IRCenter-Extension-Version"], "1.3.1");
+  assert.equal(requests[0].options.headers["X-IRCenter-Extension-Version"], "1.3.2");
   assert.equal(requests[2].options.headers.Authorization, "Bearer test-token");
   assert.equal(JSON.parse(requests[2].options.body).type, "progress");
   assert.equal((await message("getState", 8)).state, null);
@@ -116,6 +123,14 @@ function message(type, tabId, extra = {}) {
   assert.equal(starts[1].id, 9);
   assert.equal(starts[1].message.type, "start");
   assert.equal(tabs.length, 1);
+  assert.equal((await message("addIprRow", 9, { id: "job-1", name: "addSection5Row29" },
+    storage.session.jobState.formUrl)).ok, true);
+  assert.equal(injections[0].world, "MAIN");
+  assert.equal(injections[0].args[0], "addSection5Row29");
+  assert.equal((await message("addIprRow", 8, { id: "job-1", name: "addSection5Row29" },
+    storage.session.jobState.formUrl)).error, "This form cannot add the requested row");
+  assert.equal((await message("addIprRow", 9, { id: "job-1", name: "deleteSection5Row29" },
+    storage.session.jobState.formUrl)).error, "This form cannot add the requested row");
 
   assert.equal((await message("restartJournal", 8, { id: "job-1" })).error,
     "This tab does not own the extension job");
@@ -191,7 +206,7 @@ function message(type, tabId, extra = {}) {
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);
-  assert.equal(storage.local.attemptedReloadVersion, "1.3.1");
+  assert.equal(storage.local.attemptedReloadVersion, "1.3.2");
   listeners.alarm({ name: "ircenter-job-poll" });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(reloads, 1);

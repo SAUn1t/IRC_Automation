@@ -6,8 +6,12 @@ import pytest
 from playwright.sync_api import expect, sync_playwright
 
 
-@pytest.mark.parametrize("row_label", ["Доступність", "Невірний підпис"])
-def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, row_label: str):
+@pytest.mark.parametrize("row_label,generated_row", [
+    ("Доступність", 30), ("Доступність", 31), ("Невірний підпис", 30),
+])
+def test_current_ipr_form_fills_matching_table_rows_and_choices(
+    tmp_path: Path, row_label: str, generated_row: int,
+):
     chromium = shutil.which("chromium") or shutil.which("google-chrome")
     if not chromium:
         pytest.skip("Chromium is not installed")
@@ -46,9 +50,11 @@ def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, 
     <input type='checkbox' name='8[7][1]' checked>
     <input type='checkbox' name='8[9][0]' checked>
     </form></div></div>
-    <script>function addSection5Row29() { document.querySelector('#sec529table').insertAdjacentHTML(
-      'beforeend', '<tr class="sec529tr"><td><textarea name="5[31][1]"></textarea></td></tr>'); }
-    </script>"""
+    <script>function addSection5Row29() {
+      const row = document.createElement('tr'); row.className = 'sec529tr';
+      row.innerHTML = '<td><textarea name="5[31][1]"></textarea></td>';
+      document.querySelector('#sec529table').appendChild(row);
+    }</script>""".replace("5[31][1]", f"5[{generated_row}][1]")
     with sync_playwright() as playwright:
         context = playwright.chromium.launch_persistent_context(
             str(tmp_path / "profile"), executable_path=chromium, headless=True)
@@ -65,7 +71,8 @@ def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, 
         context.expose_binding("testBridge", reply)
         content = Path("chrome_extension/content.js").read_text(encoding="utf-8")
         context.add_init_script(
-            "window.chrome = {runtime: {sendMessage: message => window.testBridge(message), "
+            "window.chrome = {runtime: {sendMessage: message => message.type === 'addIprRow' "
+            "? Promise.resolve((window[message.name](), {ok: true})) : window.testBridge(message), "
             "onMessage: {addListener: () => {}}}}; "
             "window.addEventListener('DOMContentLoaded', () => {" + content + "}, {once: true});")
         page = context.new_page()
@@ -78,7 +85,7 @@ def test_current_ipr_form_fills_matching_table_rows_and_choices(tmp_path: Path, 
             context.close()
             return
         assert not any(message.get("status") == "error" for message in messages), messages
-        expect(page.locator("[name='5[31][1]']")).to_have_value("Читання")
+        expect(page.locator(f"[name='5[{generated_row}][1]']")).to_have_value("Читання")
         expect(page.locator("[name='5[1][1]']")).to_have_value("Тихий кабінет")
         expect(page.locator("[name='5[26][1]'][value='0']")).to_be_checked()
         expect(page.locator("[name='8[7][1]']")).not_to_be_checked()

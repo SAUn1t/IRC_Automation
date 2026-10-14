@@ -1,7 +1,7 @@
 (() => {
   const SITE = "https://ircenter.gov.ua";
   const JOURNAL = "/irc/index/conclusions-school";
-  const CONTENT_VERSION = "1.3.1";
+  const CONTENT_VERSION = "1.3.2";
   const normalize = value => String(value || "").normalize("NFC").replace(/\s+/g, " ").trim();
   const same = (left, right) => normalize(left).toLocaleLowerCase("uk") === normalize(right).toLocaleLowerCase("uk");
 
@@ -209,7 +209,11 @@
         let rows = [...table.querySelectorAll(`tr.${spec.row}`)];
         if (rows.length < index - spec.start + 1) {
           const before = rows.length;
-          add.click();
+          const addition = await chrome.runtime.sendMessage({
+            type: "addIprRow", id: state.job.id, name: spec.add,
+          });
+          if (!addition?.ok) throw new Error(
+            `Portal could not add a row in ${spec.selector.slice(1)}: ${addition?.error || "no response"}`);
           const deadline = Date.now() + 10000;
           while (Date.now() < deadline) {
             rows = [...table.querySelectorAll(`tr.${spec.row}`)];
@@ -221,8 +225,10 @@
         const first = [...(row?.querySelectorAll("input[name], select[name], textarea[name]") || [])]
           .map(control => control.name.match(new RegExp(`^${spec.prefix}\\[(\\d+)\\]\\[1\\]$`)))
           .find(Boolean);
-        if (!row || !first || actualNumbers.has(first[1])) {
-          throw new Error(`Portal did not add a usable row in ${spec.selector.slice(1)}`);
+        if (!row) throw new Error(`Portal add-row function created no new ${spec.selector.slice(1)} row`);
+        if (!first) throw new Error(`New ${spec.selector.slice(1)} row has no section field`);
+        if (actualNumbers.has(first[1])) {
+          throw new Error(`New ${spec.selector.slice(1)} row repeats an internal row number`);
         }
         actualNumbers.add(first[1]);
         dynamicRows.set(`${spec.prefix}[${index}]`, row);
