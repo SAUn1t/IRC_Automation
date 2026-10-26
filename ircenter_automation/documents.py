@@ -48,16 +48,10 @@ def inspect_document(path: Path) -> str:
 
 def _parse_school_ipr_2026(doc) -> ParsedDocument:
     paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
-    labels = {
-        "execution_period": "1. Період виконання ",
-    }
     fields: dict[str, str] = {}
-    for key, prefix in labels.items():
-        matches = [value[len(prefix):].strip() for value in paragraphs if value.startswith(prefix)]
-        if len(matches) != 1 or not matches[0]:
-            raise DocumentParsingError(f"Required school IPR field is missing or ambiguous: {key}")
-        fields[comparison_key(key)] = matches[0]
-    for key, label in (("child_grade", "клас навчання"), ("year_of_study", "рік навчання")):
+    for key, label in (("execution_period", r"1\.\s*період виконання"),
+                       ("child_grade", "клас навчання"),
+                       ("year_of_study", "рік навчання")):
         matches = [match.group(1).strip() for value in paragraphs
                    if (match := re.fullmatch(rf"{label}(?:\s*:\s*|\s+)(.+)", value, re.IGNORECASE))]
         if len(matches) != 1 or not matches[0]:

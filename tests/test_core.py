@@ -45,6 +45,7 @@ def test_school_name_resolves_either_two_word_order_from_labeled_full_name(tmp_p
         "прізвище, власне ім’я, по батькові(за наявності) ",
         "прізвище, власне ім’я, по батькові (за наявності) ",
         "прізвище, власне ім’я, по батькові\u00a0",
+        "Прізвище, власне ім’я, по батькові (за наявності): ",
     ):
         assert labeled_school_full_name(label + full_name) == full_name
     assert labeled_school_full_name(
@@ -133,8 +134,8 @@ def test_school_ipr_reads_underlined_phone_after_uchenytsi_colon(tmp_path: Path)
     path = tmp_path / "synthetic.docx"
     doc = Document()
     for line in (
-        "1. Період виконання з 01.09.2026 по 31.05.2027",
-        "прізвище, власне ім’я, по батькові Шевченко Олена Петрівна",
+        "1. Період виконання: з 01.09.2026 по 31.05.2027",
+        "Прізвище, власне ім’я, по батькові (за наявності): Шевченко Олена Петрівна",
         "Клас навчання: 6-А",
         "Рік навчання: 4-й",
     ):

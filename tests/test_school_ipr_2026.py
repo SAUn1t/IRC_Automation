@@ -141,6 +141,53 @@ def test_underlined_plan_yes_overrides_default_no(tmp_path: Path):
     assert result["5[26][1]"] == "1"
 
 
+def test_underlined_choices_in_capitalized_school_template(tmp_path: Path):
+    doc = Document()
+    doc.add_paragraph("Адреса задекларованого/зареєстрованого місця проживання (перебування): вул. Прикладна, 1")
+    doc.add_paragraph("Дата зарахування до закладу загальної середньої освіти: 01.09.2026")
+    doc.add_paragraph("Прізвище, власне ім’я, по батькові (за наявності) батьків: Прикладна Олена Іванівна")
+    doc.add_paragraph("Я, Прикладна Олена Іванівна")
+    doc.add_paragraph("4. Рівень підтримки:")
+    for index, ordinal in enumerate(("перший", "другий", "третій", "четвертий", "п’ятий")):
+        doc.add_paragraph().add_run(f"{ordinal} рівень підтримки").underline = index == 3
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища")
+    doc.add_paragraph("Наявність індивідуального навчального плану:")
+    doc.add_paragraph("так")
+    doc.add_paragraph().add_run("ні").underline = True
+    doc.add_paragraph("Здійснення освітнього процесу:")
+    doc.add_paragraph().add_run("за розкладом класу").underline = True
+    doc.add_paragraph("за адаптованим розкладом з відвідуванням окремих уроків за індивідуальним розкладом відповідно до індивідуального навчального плану")
+    doc.add_paragraph("Забезпечення допоміжними засобами для навчання:")
+    doc.add_paragraph("так")
+    doc.add_paragraph().add_run("ні").underline = True
+    doc.add_paragraph("8. Особливості процесу оцінювання:")
+    labels = (
+        "спрощення інструкцій", "гнучкість використання часу",
+        "зменшення кількості завдань", "використання оптимальних форм оцінювання",
+        "використання доступних форм викладу інформації",
+        "використання допоміжних засобів", "уникнення графічних завдань",
+        "уникнення зорових/слухових подразників",
+    )
+    for index, label in enumerate(labels):
+        doc.add_paragraph().add_run(label).underline = index < 4
+    doc.add_paragraph("інше __________________")
+    doc.add_paragraph("9. Потреба у продовженні строків навчання:")
+    path = tmp_path / "underlined.docx"
+    doc.save(path)
+    base = {"execution_period": "з 01.09.2026 по 31.05.2027", "year_of_study": "4",
+            "child_grade": "6-А", "parents_phones": "+380(00-000-00-00)"}
+    result = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert result["parent_address"] == "вул. Прикладна, 1"
+    assert result["child_enrollment_date"] == "01.09.2026"
+    assert result["footer_parents_names"] == "Прикладна Олена Іванівна"
+    assert result["supportLevel"] == "4"
+    assert result["5[26][1]"] == "0"
+    assert result["5[27][1]"] == "за розкладом класу"
+    assert result["5[28][1]"] == "0"
+    assert [result[f"8[{i}][1]"] for i in range(1, 9)] == ["true"] * 4 + ["false"] * 4
+    assert result["8[9][0]"] == "false"
+
+
 @pytest.mark.parametrize("markers, expected", [
     (("+ ",) * 5 + ("• ",) * 3, ["true"] * 5 + ["false"] * 3),
     (("+ ",) * 5 + ("",) * 3, ["true"] * 5 + ["false"] * 3),

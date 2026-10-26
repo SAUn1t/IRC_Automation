@@ -98,7 +98,8 @@ def _section(paragraphs: list[str], number: int) -> list[str]:
 
 
 def _unique_suffix(paragraphs: list[str], prefix: str) -> str | None:
-    matches = [text[len(prefix):].strip(" :") for text in paragraphs if text.startswith(prefix)]
+    matches = [text[len(prefix):].strip(" :") for text in paragraphs
+               if comparison_key(text).startswith(comparison_key(prefix))]
     if len(matches) > 1:
         raise DocumentParsingError(f"Duplicate school IPR label: {prefix}")
     return matches[0] if matches and matches[0] else None
@@ -142,10 +143,19 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
             add("protocol_month", month, "text")
             add("protocol_year", year[2:], "number")
             add("protocol_number", number, "number")
-        levels = [(i, selected) for i, text in enumerate(section4[1:6], 1)
-                  if (selected := _selection(text)) is not None]
-        if len(levels) == 5 and sum(checked for _, (checked, _) in levels) == 1:
-            add("supportLevel", str(next(i for i, (checked, _) in levels if checked)), "select")
+        level_labels = ("перший", "другий", "третій", "четвертий", "п’ятий")
+        if len(section4) >= 6:
+            section4_start = paragraphs.index(section4[0])
+            levels = []
+            for i, expected in enumerate(level_labels, 1):
+                marked = _selection(section4[i])
+                label = marked[1] if marked else section4[i]
+                if not comparison_key(label).startswith(comparison_key(expected)):
+                    break
+                checked = bool((marked and marked[0]) or _underlined_choice(doc.paragraphs[section4_start + i]))
+                levels.append((i, checked))
+            if len(levels) == 5 and sum(checked for _, checked in levels) == 1:
+                add("supportLevel", str(next(i for i, checked in levels if checked)), "select")
 
     environment = next((table for table in doc.tables if table.rows and
                         comparison_key(table.cell(0, 0).text).startswith(comparison_key("Назва адаптації/модифікації освітнього середовища"))), None)
@@ -174,7 +184,8 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
             return bool((marked and marked[0]) or _underlined_choice(section5_paragraphs[index])), label
 
         def selected_after(label: str, count: int = 2) -> str | None:
-            positions = [i for i, text in enumerate(section5) if text.startswith(label)]
+            positions = [i for i, text in enumerate(section5)
+                         if comparison_key(text).startswith(comparison_key(label))]
             if len(positions) != 1:
                 return None
             indices = range(positions[0] + 1, positions[0] + 1 + count)
@@ -186,7 +197,7 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
             return next(value for checked, value in choices if checked)
 
         plan_positions = [i for i, text in enumerate(section5)
-                          if text.startswith("наявність індивідуального навчального плану")]
+                          if comparison_key(text).startswith("наявність індивідуального навчального плану")]
         if len(plan_positions) == 1:
             plan_indices = range(plan_positions[0] + 1, plan_positions[0] + 3)
             plan_choices = [choice_at(index) for index in plan_indices] if plan_indices.stop <= len(section5) else []
@@ -229,7 +240,13 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                 add(f"{section}[{index}][{column}]", value, kind)
 
     section8 = _section(paragraphs, 8)
-    choices8 = [_assessment_choice(text) for text in section8[1:] if text]
+    choices8 = []
+    if section8:
+        section8_start = paragraphs.index(section8[0])
+        for index, value in enumerate(section8[1:], 1):
+            if value:
+                marked, label = _assessment_choice(value)
+                choices8.append((marked or _underlined_choice(doc.paragraphs[section8_start + index]), label))
     if choices8:
         if len(choices8) < len(_ASSESSMENT_ROWS):
             raise DocumentParsingError(
@@ -251,7 +268,9 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                     add("8[9][1]", detail, "textarea")
 
     signer = (_unique_suffix(paragraphs, "Я,") or "").rstrip(" ,.;")
-    parents = next((text for text in paragraphs if text.startswith("прізвище, власне ім’я, по батькові (за наявності) батьків")), "")
+    parents = next((text for text in paragraphs
+                    if comparison_key(text).startswith(
+                        "прізвище, власне ім’я, по батькові (за наявності) батьків")), "")
     if signer and comparison_key(signer) in comparison_key(parents):
         add("footer_parents_names", signer, "textarea")
     return tuple(fields)
