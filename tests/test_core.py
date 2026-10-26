@@ -91,14 +91,20 @@ def test_docx_duplicate_and_malformed_stop(tmp_path: Path):
         parse_document(corrupt)
 
 
-def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path):
+@pytest.mark.parametrize("class_line", (
+    "клас навчання 2-А",
+    "Клас навчання 2-А",
+    "Клас навчання: 2-А",
+    "Клас навчання:2-А",
+))
+def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path, class_line: str):
     path = tmp_path / "synthetic.docx"
     doc = Document()
     for line in (
         "1. Період виконання з 01.09.2026 по 31.05.2027",
         "прізвище, власне ім’я, по батькові\u00a0Шевченко Іван Петрович",
         "контактні номери телефонів батьків (інших законних представників) учня 000 000 000",
-        "клас навчання 2-А", "рік навчання 2",
+        class_line, "рік навчання 2",
         "5. Створення інклюзивного освітнього середовища, зокрема:",
         "11. Погодження індивідуальної програми розвитку з батьками",
     ):
@@ -108,6 +114,7 @@ def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path):
     parsed = parse_document(path)
     assert parsed.template == "school_ipr_2026"
     assert parsed.fields["execution_period"] == "з 01.09.2026 по 31.05.2027"
+    assert parsed.fields["child_grade"] == "2-А"
     assert parsed.fields["year_of_study"] == "2"
     assert len(parsed.fields) == 5  # Four transferable fields plus the child identity guard.
 
