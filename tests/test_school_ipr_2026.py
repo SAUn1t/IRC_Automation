@@ -98,6 +98,49 @@ def test_individual_plan_defaults_to_no_only_without_explicit_selection(tmp_path
     assert result["5[26][1]"] == expected
 
 
+@pytest.mark.parametrize("underlined_option, expected", [
+    (0, "за розкладом класу"),
+    (1, "за адаптованим розкладом з відвідуванням окремих уроків за індивідуальним розкладом відповідно до індивідуального навчального плану"),
+    (None, None),
+    ("both", None),
+])
+def test_underlined_schedule_option_counts_as_selected(tmp_path: Path, underlined_option, expected):
+    doc = Document()
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища")
+    doc.add_paragraph("здійснення освітнього процесу:")
+    options = (
+        "за розкладом класу",
+        "за адаптованим розкладом з відвідуванням окремих уроків за індивідуальним розкладом відповідно до індивідуального навчального плану",
+    )
+    for index, option in enumerate(options):
+        paragraph = doc.add_paragraph()
+        box = paragraph.add_run("  ")
+        box.underline = underlined_option is None and index == 0
+        label = paragraph.add_run(option)
+        label.underline = index == underlined_option or underlined_option == "both"
+    path = tmp_path / "schedule.docx"
+    doc.save(path)
+    base = {"execution_period": "з 01.09.2026 по 31.05.2027", "year_of_study": "2",
+            "child_grade": "2-А", "parents_phones": "000 000 000"}
+    result = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert result.get("5[27][1]") == expected
+
+
+def test_underlined_plan_yes_overrides_default_no(tmp_path: Path):
+    doc = Document()
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища")
+    doc.add_paragraph("наявність індивідуального навчального плану:")
+    paragraph = doc.add_paragraph(" ")
+    paragraph.add_run("так").underline = True
+    doc.add_paragraph(" ні")
+    path = tmp_path / "plan.docx"
+    doc.save(path)
+    base = {"execution_period": "з 01.09.2026 по 31.05.2027", "year_of_study": "2",
+            "child_grade": "2-А", "parents_phones": "000 000 000"}
+    result = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert result["5[26][1]"] == "1"
+
+
 @pytest.mark.parametrize("markers, expected", [
     (("+ ",) * 5 + ("• ",) * 3, ["true"] * 5 + ["false"] * 3),
     (("+ ",) * 5 + ("",) * 3, ["true"] * 5 + ["false"] * 3),

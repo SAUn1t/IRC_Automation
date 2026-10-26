@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from docx import Document
+from docx.text.paragraph import Paragraph
 
 from .errors import DocumentParsingError
 from .normalization import comparison_key, normalize_space
@@ -70,6 +71,12 @@ def _selection(text: str) -> tuple[bool, str] | None:
     if not markers.strip():
         return None
     return "+" in markers or "☑" in markers or "☒" in markers, label.strip()
+
+
+def _underlined_choice(paragraph: Paragraph) -> bool:
+    """An underlined option label is selected; underlined boxes/lines alone are not."""
+    return any(run.underline and any(char.isalpha() for char in run.text)
+               for run in paragraph.runs)
 
 
 def _assessment_choice(text: str) -> tuple[bool, str]:
@@ -157,25 +164,36 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
 
     section5 = _section(paragraphs, 5)
     if section5:
+        section5_start = paragraphs.index(section5[0])
+        section5_paragraphs = doc.paragraphs[section5_start:section5_start + len(section5)]
+
+        def choice_at(index: int) -> tuple[bool, str]:
+            text = section5[index]
+            marked = _selection(text)
+            label = marked[1] if marked else text
+            return bool((marked and marked[0]) or _underlined_choice(section5_paragraphs[index])), label
+
         def selected_after(label: str, count: int = 2) -> str | None:
             positions = [i for i, text in enumerate(section5) if text.startswith(label)]
             if len(positions) != 1:
                 return None
-            choices = [_selection(text) for text in section5[positions[0] + 1:positions[0] + 1 + count]]
-            if any(choice is None for choice in choices) or sum(choice[0] for choice in choices) != 1:
+            indices = range(positions[0] + 1, positions[0] + 1 + count)
+            if indices.stop > len(section5):
                 return None
-            return next(choice[1] for choice in choices if choice[0])
+            choices = [choice_at(index) for index in indices]
+            if sum(checked for checked, _ in choices) != 1:
+                return None
+            return next(value for checked, value in choices if checked)
 
         plan_positions = [i for i, text in enumerate(section5)
                           if text.startswith("наявність індивідуального навчального плану")]
         if len(plan_positions) == 1:
-            plan_lines = section5[plan_positions[0] + 1:plan_positions[0] + 3]
-            plan_choices = [_selection(line) for line in plan_lines]
-            plan_labels = [comparison_key(choice[1] if choice else line)
-                           for line, choice in zip(plan_lines, plan_choices)]
-            if plan_labels == ["так", "ні"] and sum(bool(choice and choice[0]) for choice in plan_choices) <= 1:
+            plan_indices = range(plan_positions[0] + 1, plan_positions[0] + 3)
+            plan_choices = [choice_at(index) for index in plan_indices] if plan_indices.stop <= len(section5) else []
+            if ([comparison_key(label) for _, label in plan_choices] == ["так", "ні"]
+                    and sum(checked for checked, _ in plan_choices) <= 1):
                 # The portal defaults to "так"; an unmarked DOCX pair means "ні".
-                add("5[26][1]", "1" if plan_choices[0] and plan_choices[0][0] else "0", "radio")
+                add("5[26][1]", "1" if plan_choices[0][0] else "0", "radio")
         schedule = selected_after("здійснення освітнього процесу")
         if schedule:
             add("5[27][1]", schedule.rstrip(" _"), "select")
