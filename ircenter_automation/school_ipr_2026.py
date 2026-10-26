@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from docx import Document
+from docx.oxml.ns import qn
+from docx.table import Table
 from docx.text.paragraph import Paragraph
 
 from .errors import DocumentParsingError
@@ -105,10 +107,17 @@ def _unique_suffix(paragraphs: list[str], prefix: str) -> str | None:
     return matches[0] if matches and matches[0] else None
 
 
+def _body_tables(doc) -> tuple[Table, ...]:
+    """Include tables wrapped in Word content controls, but not nested cell tables."""
+    return tuple(Table(element, doc._body) for element in doc.element.body.xpath(".//w:tbl")
+                 if not any(ancestor.tag == qn("w:tc") for ancestor in element.iterancestors()))
+
+
 def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField, ...]:
     """Return only DOCX values with the same meaning in the current 11-section form."""
     doc = Document(path)
     paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
+    body_tables = _body_tables(doc)
     fields: list[PortalField] = []
     seen: set[str] = set()
 
@@ -157,7 +166,7 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
             if len(levels) == 5 and sum(checked for _, checked in levels) == 1:
                 add("supportLevel", str(next(i for i, checked in levels if checked)), "select")
 
-    environment = next((table for table in doc.tables if table.rows and
+    environment = next((table for table in body_tables if table.rows and
                         comparison_key(table.cell(0, 0).text).startswith(comparison_key("Назва адаптації/модифікації освітнього середовища"))), None)
     if environment:
         candidates = []
@@ -221,23 +230,25 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
         ("Прізвище, власне ім’я,", "10", 1, ("textarea", "textarea")),
     )
     for first_header, section, base_row, kinds in tables:
-        matches = [table for table in doc.tables if table.rows and
+        matches = [table for table in body_tables if table.rows and
                    comparison_key(table.cell(0, 0).text).startswith(comparison_key(first_header))]
         if len(matches) > 1:
             raise DocumentParsingError(f"Duplicate school IPR table in section {section}")
         if not matches:
             continue
         table = matches[0]
-        for index, row in enumerate(table.rows[1:], base_row):
+        index = base_row
+        for row in table.rows[1:]:
             values = [normalize_space(cell.text) for cell in row.cells]
             if len(values) < len(kinds):
                 raise DocumentParsingError(f"School IPR section {section} has too few columns")
-            if not values[0]:
+            if not values[0] or (section == "6" and not any(values[1:4])):
                 continue
             for column, (value, kind) in enumerate(zip(values, kinds), 1):
                 if section == "5" and column == 2:
                     value = _subject_choice(value)
                 add(f"{section}[{index}][{column}]", value, kind)
+            index += 1
 
     section8 = _section(paragraphs, 8)
     choices8 = []

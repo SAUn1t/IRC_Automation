@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 from docx import Document
+from docx.oxml import OxmlElement
 
-from ircenter_automation.school_ipr_2026 import extract_portal_fields
+from ircenter_automation.school_ipr_2026 import _ENVIRONMENT_ROWS, extract_portal_fields
 
 
 @pytest.mark.parametrize("section9_choices", [
@@ -186,6 +187,70 @@ def test_underlined_choices_in_capitalized_school_template(tmp_path: Path):
     assert result["5[28][1]"] == "0"
     assert [result[f"8[{i}][1]"] for i in range(1, 9)] == ["true"] * 4 + ["false"] * 4
     assert result["8[9][0]"] == "false"
+
+
+def test_reads_tables_inside_word_content_controls_and_skips_heading_only_goal_row(tmp_path: Path):
+    doc = Document()
+
+    def wrap(table):
+        element = table._element
+        parent = element.getparent()
+        control = OxmlElement("w:sdt")
+        content = OxmlElement("w:sdtContent")
+        control.append(content)
+        parent.replace(element, control)
+        content.append(element)
+
+    environment = doc.add_table(rows=1, cols=2)
+    environment.cell(0, 0).text = "Назва адаптації/модифікації освітнього середовища"
+    for label, _number in _ENVIRONMENT_ROWS:
+        row = environment.add_row()
+        row.cells[0].text, row.cells[1].text = label, "Потрібний захід"
+    wrap(environment)
+
+    subjects = doc.add_table(rows=1, cols=3)
+    subjects.cell(0, 0).text = "Найменування навчального предмета"
+    row = subjects.add_row()
+    row.cells[0].text, row.cells[1].text, row.cells[2].text = "Математика", "Адаптація", "Учитель Приклад"
+    wrap(subjects)
+
+    goals = doc.add_table(rows=1, cols=5)
+    goals.cell(0, 0).text = "Освітня галузь/ навчальний предмет"
+    for values in (("Мовна", "Читає", "Навчитися", "Прочитає"),
+                   ("Підзаголовок", "", "", ""),
+                   ("Математична", "Рахує", "Навчитися", "Порахує")):
+        row = goals.add_row()
+        for cell, value in zip(row.cells, values):
+            cell.text = value
+    wrap(goals)
+
+    services = doc.add_table(rows=1, cols=4)
+    services.cell(0, 0).text = "Найменування заняття"
+    row = services.add_row()
+    for cell, value in zip(row.cells, ("Заняття", "Фахівець Приклад", "Вівторок", "10:00")):
+        cell.text = value
+    wrap(services)
+
+    team = doc.add_table(rows=1, cols=2)
+    team.cell(0, 0).text = "Прізвище, власне ім’я, по батькові"
+    row = team.add_row()
+    row.cells[0].text, row.cells[1].text = "Фахівець Приклад", "Учитель"
+    wrap(team)
+
+    path = tmp_path / "wrapped-tables.docx"
+    doc.save(path)
+    assert not Document(path).tables
+    base = {"execution_period": "з 01.09.2026 по 31.05.2027", "year_of_study": "4",
+            "child_grade": "6-А", "parents_phones": "000 000 000"}
+    result = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert result["5[1][1]"] == "Потрібний захід"
+    assert result["5[29][1]"] == "Математика"
+    assert result["5[29][2]"] == "Адаптація"
+    assert result["6[1][1]"] == "Мовна"
+    assert result["6[2][1]"] == "Математична"
+    assert "6[3][1]" not in result
+    assert result["7[1][1]"] == "Заняття"
+    assert result["10[1][2]"] == "Учитель"
 
 
 @pytest.mark.parametrize("markers, expected", [
