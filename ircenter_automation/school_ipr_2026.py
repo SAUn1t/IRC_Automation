@@ -52,11 +52,11 @@ _ASSESSMENT_ROWS = (
 
 def _selection(text: str) -> tuple[bool, str] | None:
     value = normalize_space(text)
-    if value.startswith("+"):
-        return True, value[1:].strip()
-    if value.startswith(("\uf07f", "☐", "□")):
-        return False, value[1:].strip()
-    return None
+    label = value.lstrip("+\uf07f☐□☑☒ ")
+    markers = value[:len(value) - len(label)]
+    if not markers.strip():
+        return None
+    return "+" in markers or "☑" in markers or "☒" in markers, label.strip()
 
 
 def _assessment_choice(text: str) -> tuple[bool, str]:
