@@ -60,12 +60,11 @@ def _selection(text: str) -> tuple[bool, str] | None:
 
 
 def _assessment_choice(text: str) -> tuple[bool, str]:
-    """In section 8, a bullet or an unmarked list item means unchecked."""
-    selected = _selection(text)
-    if selected is not None:
-        return selected
+    """Read mixed plus/bullet prefixes without mistaking a bullet for a label."""
     value = normalize_space(text)
-    return False, value.lstrip("•●· ").strip()
+    label = value.lstrip("+•●·\uf07f☐□ ")
+    markers = value[:len(value) - len(label)]
+    return "+" in markers, label.strip()
 
 
 def _section(paragraphs: list[str], number: int) -> list[str]:
