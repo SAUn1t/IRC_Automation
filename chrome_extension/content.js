@@ -1,7 +1,7 @@
 (() => {
   const SITE = "https://ircenter.gov.ua";
   const JOURNAL = "/irc/index/conclusions-school";
-  const CONTENT_VERSION = "1.3.2";
+  const CONTENT_VERSION = "1.3.3";
   const normalize = value => String(value || "").normalize("NFC").replace(/\s+/g, " ").trim();
   const same = (left, right) => normalize(left).toLocaleLowerCase("uk") === normalize(right).toLocaleLowerCase("uk");
 
@@ -251,13 +251,27 @@
         throw new Error(`A mapped form field is missing: ${field.name}`);
       }
       const tag = control.tagName;
-      if ((kind === "select" && (tag !== "SELECT" || ![...control.options].some(option => option.value === field.value))) ||
-          (kind === "textarea" && tag !== "TEXTAREA") ||
+      const actualType = tag === "INPUT" ? `${tag}/${control.type}` : tag;
+      if (kind === "select") {
+        if (tag !== "SELECT") {
+          throw new Error(`Field ${field.name}: expected SELECT, portal has ${actualType}`);
+        }
+        const options = [...control.options].map(option => option.value);
+        if (!options.includes(field.value)) {
+          const comparable = value => normalize(value).toLocaleLowerCase("uk");
+          const caseMatch = options.some(value => comparable(value) === comparable(field.value));
+          const withoutMarks = field.value.replace(/^[+\uf07f☐□☑☒•●·\s]+/, "");
+          const markerMatch = options.some(value => comparable(value) === comparable(withoutMarks));
+          throw new Error(`Select ${field.name}: DOCX choice differs from ${options.length} portal options ` +
+            `(case/space match: ${caseMatch ? "yes" : "no"}; marker match: ${markerMatch ? "yes" : "no"})`);
+        }
+      }
+      if ((kind === "textarea" && tag !== "TEXTAREA") ||
           (kind === "number" && (tag !== "INPUT" || control.type !== "number")) ||
           (kind === "text" && (tag !== "INPUT" || control.type !== "text")) ||
           (kind === "radio" && control.type !== "radio") ||
           (kind === "checkbox" && (control.type !== "checkbox" || !["true", "false"].includes(field.value)))) {
-        throw new Error(`A mapped form field changed type or options: ${field.name}`);
+        throw new Error(`Field ${field.name}: expected ${kind}, portal has ${actualType}`);
       }
       if (field.rowLabel) {
         const row = control.closest("tr");

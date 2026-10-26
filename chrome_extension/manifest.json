@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "IR Center Local Assistant",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Connects the local DOCX assistant to your existing Chrome session on IR Center.",
   "permissions": ["storage", "alarms", "tabs", "scripting"],
   "host_permissions": ["https://ircenter.gov.ua/*", "http://127.0.0.1/*"],

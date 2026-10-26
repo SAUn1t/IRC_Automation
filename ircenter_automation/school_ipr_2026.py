@@ -186,6 +186,12 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
             if not values[0]:
                 continue
             for column, (value, kind) in enumerate(zip(values, kinds), 1):
+                if section == "5" and column == 2:
+                    choice = comparison_key(value.lstrip("+\uf07f☐□☑☒•●· ").strip())
+                    if choice == "адаптація":
+                        value = "Адаптація"
+                    elif choice == "модифікація":
+                        value = "Модифікація"
                 add(f"{section}[{index}][{column}]", value, kind)
 
     section8 = _section(paragraphs, 8)

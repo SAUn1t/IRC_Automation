@@ -38,9 +38,9 @@ def test_extracts_matching_sections_and_skips_section9(tmp_path: Path, section9_
         doc.add_paragraph(text)
     subjects = doc.add_table(rows=1, cols=3)
     subjects.rows[0].cells[0].text = "Найменування навчального предмета"
-    for name in ("Математика", "Читання"):
+    for name, adaptation in (("Математика", "адаптація"), ("Читання", "+ Модифікація")):
         cells = subjects.add_row().cells
-        cells[0].text, cells[1].text, cells[2].text = name, "Адаптація", "Учитель Приклад"
+        cells[0].text, cells[1].text, cells[2].text = name, adaptation, "Учитель Приклад"
     goals = doc.add_table(rows=1, cols=5)
     goals.rows[0].cells[0].text = "Освітня галузь/ навчальний предмет"
     cells = goals.add_row().cells
@@ -56,7 +56,9 @@ def test_extracts_matching_sections_and_skips_section9(tmp_path: Path, section9_
     assert result["5[26][1]"] == "0"
     assert result["5[27][1]"] == "за розкладом класу"
     assert result["5[29][1]"] == "Математика"
+    assert result["5[29][2]"] == "Адаптація"
     assert result["5[30][1]"] == "Читання"
+    assert result["5[30][2]"] == "Модифікація"
     assert result["6[1][4]"] == "Прочитає"
     assert result["8[7][1]"] == "false"
     assert result["8[9][0]"] == "false"
