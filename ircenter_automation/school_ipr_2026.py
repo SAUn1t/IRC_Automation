@@ -166,9 +166,16 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                 return None
             return next(choice[1] for choice in choices if choice[0])
 
-        plan = selected_after("наявність індивідуального навчального плану")
-        if plan and comparison_key(plan) in ("так", "ні"):
-            add("5[26][1]", "1" if comparison_key(plan) == "так" else "0", "radio")
+        plan_positions = [i for i, text in enumerate(section5)
+                          if text.startswith("наявність індивідуального навчального плану")]
+        if len(plan_positions) == 1:
+            plan_lines = section5[plan_positions[0] + 1:plan_positions[0] + 3]
+            plan_choices = [_selection(line) for line in plan_lines]
+            plan_labels = [comparison_key(choice[1] if choice else line)
+                           for line, choice in zip(plan_lines, plan_choices)]
+            if plan_labels == ["так", "ні"] and sum(bool(choice and choice[0]) for choice in plan_choices) <= 1:
+                # The portal defaults to "так"; an unmarked DOCX pair means "ні".
+                add("5[26][1]", "1" if plan_choices[0] and plan_choices[0][0] else "0", "radio")
         schedule = selected_after("здійснення освітнього процесу")
         if schedule:
             add("5[27][1]", schedule.rstrip(" _"), "select")

@@ -77,6 +77,27 @@ def test_subject_choice_does_not_guess_when_both_methods_are_used():
     assert _subject_choice(value) == value
 
 
+@pytest.mark.parametrize("choices, expected", [
+    (("так", "ні"), "0"),
+    ((" так", " ні"), "0"),
+    (("+ так", " ні"), "1"),
+    ((" так", "+ ні"), "0"),
+    (("+ так", "ні"), "1"),
+])
+def test_individual_plan_defaults_to_no_only_without_explicit_selection(tmp_path: Path, choices, expected):
+    doc = Document()
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища")
+    doc.add_paragraph("наявність індивідуального навчального плану:")
+    for choice in choices:
+        doc.add_paragraph(choice)
+    path = tmp_path / "plan.docx"
+    doc.save(path)
+    base = {"execution_period": "з 01.09.2026 по 31.05.2027", "year_of_study": "2",
+            "child_grade": "2-А", "parents_phones": "000 000 000"}
+    result = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert result["5[26][1]"] == expected
+
+
 @pytest.mark.parametrize("markers, expected", [
     (("+ ",) * 5 + ("• ",) * 3, ["true"] * 5 + ["false"] * 3),
     (("+ ",) * 5 + ("",) * 3, ["true"] * 5 + ["false"] * 3),
