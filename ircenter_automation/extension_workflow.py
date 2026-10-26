@@ -21,8 +21,8 @@ class ExtensionWorkflow:
         self.on_review = on_review
         self.stop_event = stop_event
 
-    def run(self, raw_name: str) -> str:
-        guide = prepare_manual_entry(self.settings, raw_name)
+    def run(self, raw_name: str, class_name: str = "") -> str:
+        guide = prepare_manual_entry(self.settings, raw_name, class_name)
         field_count = len(guide.portal_fields or guide.fields)
         warnings = ["Review every filled field and complete any missing IPR sections manually."]
         if guide.portal_fields and not any(field.name == "9[1][1]" for field in guide.portal_fields):

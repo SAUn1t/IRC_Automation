@@ -9,7 +9,8 @@ from PySide6.QtWidgets import (
     QTextEdit, QVBoxLayout, QWidget,
 )
 
-from ..documents import find_document, inspect_document, parse_document
+from ..documents import inspect_document, parse_document
+from ..document_source import drive_folder_id, open_document
 from .. import __version__
 from ..errors import WorkflowError
 from ..extension_workflow import ExtensionWorkflow
@@ -28,10 +29,11 @@ class Worker(QThread):
     outcome = Signal(str)
     failed = Signal(str)
 
-    def __init__(self, settings_path: Path, name: str):
+    def __init__(self, settings_path: Path, name: str, class_name: str = ""):
         super().__init__()
         self.settings_path = settings_path
         self.name = name
+        self.class_name = class_name
         self.stop_event = Event()
         self.continue_event = Event()
         self.submit_event = Event()
@@ -47,7 +49,7 @@ class Worker(QThread):
                 workflow = Workflow(settings, self.status.emit,
                                     self.authentication_needed.emit, self.review_ready.emit,
                                     self.stop_event, self.continue_event, self.submit_event)
-            self.outcome.emit(workflow.run(self.name))
+            self.outcome.emit(workflow.run(self.name, self.class_name))
         except WorkflowError as exc:
             self.failed.emit(str(exc))
         except Exception:
@@ -97,21 +99,47 @@ class MainWindow(QMainWindow):
         self.update_check: UpdateCheckWorker | None = None
         self.update_download: UpdateDownloadWorker | None = None
         self.manual_update_check = False
-        self.setWindowTitle(f"IR Center — Local DOCX form assistant v{__version__}")
+        self.setWindowTitle(f"IR Center — DOCX form assistant v{__version__}")
         container = QWidget()
         layout = QVBoxLayout(container)
         self.name_input = QLineEdit()
         self.name_input.setPlaceholderText("Name Surname or Surname Name")
         layout.addWidget(QLabel("Child's first name and surname, in either order for school IPR DOCX"))
         layout.addWidget(self.name_input)
-        folder_row = QHBoxLayout()
+        source_row = QHBoxLayout()
+        source_row.addWidget(QLabel("Document source:"))
+        self.source_mode = QComboBox()
+        self.source_mode.addItem("Local folder", "local")
+        self.source_mode.addItem("Google Drive", "drive")
+        self.source_mode.currentIndexChanged.connect(self.choose_source_mode)
+        source_row.addWidget(self.source_mode)
+        layout.addLayout(source_row)
+        self.folder_container = QWidget()
+        folder_row = QHBoxLayout(self.folder_container)
         self.folder_label = QLabel()
         self.folder_label.setWordWrap(True)
         folder_row.addWidget(self.folder_label)
-        browse = QPushButton("Choose DOCX folder")
-        browse.clicked.connect(self.choose_folder)
-        folder_row.addWidget(browse)
-        layout.addLayout(folder_row)
+        self.folder_button = QPushButton("Choose DOCX folder")
+        self.folder_button.clicked.connect(self.choose_folder)
+        folder_row.addWidget(self.folder_button)
+        layout.addWidget(self.folder_container)
+        self.drive_container = QWidget()
+        drive_layout = QVBoxLayout(self.drive_container)
+        link_row = QHBoxLayout()
+        self.drive_link_input = QLineEdit()
+        self.drive_link_input.setPlaceholderText("Google Drive parent folder link")
+        link_row.addWidget(self.drive_link_input)
+        self.drive_link_button = QPushButton("Save Drive link")
+        self.drive_link_button.clicked.connect(self.save_drive_link)
+        link_row.addWidget(self.drive_link_button)
+        drive_layout.addLayout(link_row)
+        class_row = QHBoxLayout()
+        class_row.addWidget(QLabel("Class folder:"))
+        self.class_input = QLineEdit()
+        self.class_input.setPlaceholderText("7-A")
+        class_row.addWidget(self.class_input)
+        drive_layout.addLayout(class_row)
+        layout.addWidget(self.drive_container)
         browser_row = QHBoxLayout()
         browser_row.addWidget(QLabel("Browser mode:"))
         self.browser_mode = QComboBox()
@@ -138,7 +166,7 @@ class MainWindow(QMainWindow):
         self.process_button = QPushButton("Process")
         self.process_button.clicked.connect(self.process)
         button_row.addWidget(self.process_button)
-        self.preview_button = QPushButton("Preview DOCX locally")
+        self.preview_button = QPushButton("Preview DOCX")
         self.preview_button.clicked.connect(self.preview_document)
         button_row.addWidget(self.preview_button)
         self.manual_button = QPushButton("Copy fields for normal browser")
@@ -230,6 +258,12 @@ class MainWindow(QMainWindow):
         try:
             settings = load_settings(self.settings_path)
             self.folder_label.setText(f"DOCX folder: {settings.docx_folder}")
+            self.source_mode.blockSignals(True)
+            self.source_mode.setCurrentIndex(self.source_mode.findData(settings.document_source))
+            self.source_mode.blockSignals(False)
+            self.folder_container.setVisible(settings.document_source == "local")
+            self.drive_container.setVisible(settings.document_source == "drive")
+            self.drive_link_input.setText(settings.drive_folder_url)
             mode = next(
                 (index for index in range(self.browser_mode.count())
                  if self.browser_mode.itemData(index) == (settings.browser, settings.browser_transport)), -1
@@ -255,6 +289,47 @@ class MainWindow(QMainWindow):
         temp.replace(self.settings_path)
         self.refresh_settings()
 
+    def choose_source_mode(self) -> None:
+        selection = self.source_mode.currentData()
+        if selection is None or (self.worker and self.worker.isRunning()):
+            return
+        data = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        data["document_source"] = selection
+        temp = self.settings_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp.replace(self.settings_path)
+        self.refresh_settings()
+
+    def save_drive_link(self) -> bool:
+        link = self.drive_link_input.text().strip()
+        try:
+            if link:
+                drive_folder_id(link)
+        except ValueError as exc:
+            self.status_panel.append(str(exc))
+            return False
+        data = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        data["drive_folder_url"] = link
+        temp = self.settings_path.with_suffix(".tmp")
+        temp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        temp.replace(self.settings_path)
+        self.refresh_settings()
+        self.status_panel.append("Google Drive parent folder link saved.")
+        return True
+
+    def _ready_settings(self):
+        settings = load_settings(self.settings_path)
+        if settings.document_source == "drive":
+            if self.drive_link_input.text().strip() != settings.drive_folder_url:
+                if not self.save_drive_link():
+                    raise WorkflowError("Google Drive folder link is invalid")
+                settings = load_settings(self.settings_path)
+            if not settings.drive_folder_url:
+                raise WorkflowError("Paste and save the Google Drive parent folder link")
+            if not self.class_input.text().strip():
+                raise WorkflowError("Enter the class folder name, such as 7-A")
+        return settings
+
     def choose_browser_mode(self) -> None:
         selection = self.browser_mode.currentData()
         if selection is None or (self.worker and self.worker.isRunning()):
@@ -277,11 +352,16 @@ class MainWindow(QMainWindow):
     def process(self) -> None:
         if self.worker and self.worker.isRunning():
             return
+        try:
+            self._ready_settings()
+        except WorkflowError as exc:
+            self.status_panel.append(str(exc))
+            return
         self.summary.setText("Processing")
         self.status_panel.clear()
         self.submit_button.setEnabled(False)
         self.continue_button.setEnabled(False)
-        self.worker = Worker(self.settings_path, self.name_input.text())
+        self.worker = Worker(self.settings_path, self.name_input.text(), self.class_input.text())
         self.worker.status.connect(self.status_panel.append)
         self.worker.authentication_needed.connect(self.authentication_needed)
         self.worker.review_ready.connect(self.review_ready)
@@ -293,14 +373,19 @@ class MainWindow(QMainWindow):
         self.preview_button.setEnabled(False)
         self.manual_button.setEnabled(False)
         self.browser_mode.setEnabled(False)
+        self.source_mode.setEnabled(False)
+        self.folder_button.setEnabled(False)
+        self.drive_link_input.setEnabled(False)
+        self.drive_link_button.setEnabled(False)
+        self.class_input.setEnabled(False)
         self.pair_button.setEnabled(False)
         self.update_button.setEnabled(False)
 
     def show_manual_entry(self) -> None:
         try:
-            guide = prepare_manual_entry(load_settings(self.settings_path), self.name_input.text())
+            guide = prepare_manual_entry(self._ready_settings(), self.name_input.text(), self.class_input.text())
         except WorkflowError as exc:
-            self.summary.setText("Local manual guide stopped")
+            self.summary.setText("Manual guide stopped")
             self.status_panel.append(str(exc))
             return
         self.summary.setText(
@@ -330,23 +415,23 @@ class MainWindow(QMainWindow):
 
     def preview_document(self) -> None:
         try:
-            settings = load_settings(self.settings_path)
+            settings = self._ready_settings()
             child = parse_child_name(self.name_input.text())
-            path = find_document(settings.docx_folder, child, settings.filename_patterns)
-            layout = inspect_document(path)
-            parsed = parse_document(path)
-            if layout.startswith("11-section school IPR"):
-                child = resolve_two_word_name(child, parsed.fields[comparison_key("docx_child_full_name")])
-                base = {name: parsed.fields[comparison_key(name)] for name in
-                        ("execution_period", "year_of_study", "child_grade", "parents_phones")}
-                candidates = extract_portal_fields(path, base)
-                self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLayout: {layout}\nMatching populated controls: {len(candidates)}")
-                self.status_panel.append("Matching fields can be filled in Chrome. Review the complete form before generating the document.")
-                return
-            self.summary.setText(f"Local preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {path.name}\nLabels parsed: {len(parsed.fields)}")
+            with open_document(settings, child, self.class_input.text()) as source:
+                layout = inspect_document(source.path)
+                parsed = parse_document(source.path)
+                if layout.startswith("11-section school IPR"):
+                    child = resolve_two_word_name(child, parsed.fields[comparison_key("docx_child_full_name")])
+                    base = {name: parsed.fields[comparison_key(name)] for name in
+                            ("execution_period", "year_of_study", "child_grade", "parents_phones")}
+                    candidates = extract_portal_fields(source.path, base)
+                    self.summary.setText(f"Preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {source.name}\nLayout: {layout}\nMatching populated controls: {len(candidates)}")
+                    self.status_panel.append("Matching fields can be filled in Chrome. Review the complete form before generating the document.")
+                    return
+            self.summary.setText(f"Preview only — nothing sent or submitted\nChild: {child.display}\nDOCX: {source.name}\nLabels parsed: {len(parsed.fields)}")
             self.status_panel.append("DOCX parsed locally. Configure real site selectors and field mapping before Process can fill a form.")
         except WorkflowError as exc:
-            self.summary.setText("Local preview stopped")
+            self.summary.setText("Preview stopped")
             self.status_panel.append(str(exc))
 
     def authentication_needed(self) -> None:
@@ -386,6 +471,11 @@ class MainWindow(QMainWindow):
         self.preview_button.setEnabled(True)
         self.manual_button.setEnabled(True)
         self.browser_mode.setEnabled(True)
+        self.source_mode.setEnabled(True)
+        self.folder_button.setEnabled(True)
+        self.drive_link_input.setEnabled(True)
+        self.drive_link_button.setEnabled(True)
+        self.class_input.setEnabled(True)
         self.pair_button.setEnabled(True)
         self.update_button.setEnabled(True)
         self.stop_button.setEnabled(False)
@@ -399,6 +489,11 @@ class MainWindow(QMainWindow):
         self.preview_button.setEnabled(True)
         self.manual_button.setEnabled(True)
         self.browser_mode.setEnabled(True)
+        self.source_mode.setEnabled(True)
+        self.folder_button.setEnabled(True)
+        self.drive_link_input.setEnabled(True)
+        self.drive_link_button.setEnabled(True)
+        self.class_input.setEnabled(True)
         self.pair_button.setEnabled(True)
         self.update_button.setEnabled(True)
         self.stop_button.setEnabled(False)

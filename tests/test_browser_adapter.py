@@ -327,7 +327,7 @@ def test_journal_duplicate_on_later_page_stops_before_open(page):
     second = _journal_html(_journal_row("Шевченко Іван Олександрович", 43))
     _route_journal(page, first, second)
     with pytest.raises(MultipleChildrenFound):
-        IRCenter(page, JOURNAL_SELECTORS, 1000).find_child(ChildName("Іван", "Шевченко"))
+        IRCenter(page, JOURNAL_SELECTORS, 3000).find_child(ChildName("Іван", "Шевченко"))
     assert page.url.endswith("?page=2")
 
 

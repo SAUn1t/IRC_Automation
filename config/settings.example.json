@@ -1,5 +1,7 @@
 {
   "docx_folder": "~/Documents/IRCenter",
+  "document_source": "local",
+  "drive_folder_url": "",
   "filename_patterns": [
     "{Surname} {Name}.docx",
     "{Name} {Surname}.docx",

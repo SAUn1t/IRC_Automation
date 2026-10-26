@@ -1,11 +1,11 @@
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from threading import Event
 from typing import Callable
 
 from .browser import BrowserSession, require_selectors
-from .documents import find_document, parse_document
+from .documents import parse_document
+from .document_source import open_document
 from .errors import Stopped, SubmissionNotConfirmed
 from .form_filler import FormFiller
 from .ircenter import IRCenter
@@ -57,15 +57,16 @@ class Workflow:
             self._check_stop()
         self._check_stop()
 
-    def run(self, raw_name: str) -> str:
+    def run(self, raw_name: str, class_name: str = "") -> str:
         try:
             entered = parse_child_name(raw_name)
             self._advance(State.INPUT_VALIDATED, f"Normalized name input: {entered.display}")
-            document_path: Path = find_document(self.settings.docx_folder, entered, self.settings.filename_patterns)
-            self._advance(State.DOCUMENT_FOUND, f"Document found: {document_path.name}")
-            require_selectors(self.settings.selectors, self.settings.manual_review_only)
-            specs = load_mapping(self.settings.mapping_file)
-            parsed = parse_document(document_path)
+            with open_document(self.settings, entered, class_name) as source:
+                document_name = source.name
+                self._advance(State.DOCUMENT_FOUND, f"Document found: {document_name}")
+                require_selectors(self.settings.selectors, self.settings.manual_review_only)
+                specs = load_mapping(self.settings.mapping_file)
+                parsed = parse_document(source.path)
             child = entered
             if parsed.template == "school_ipr_2026":
                 child = resolve_two_word_name(entered, parsed.fields[comparison_key("docx_child_full_name")])
@@ -111,7 +112,7 @@ class Workflow:
                 self._advance(State.FORM_VERIFIED, f"Full verification passed: {len(verification)}/{len(fields)}")
                 site.verify_child_identity(child, on_form=True)
                 warnings = ("Only exact scalar fields were transferred. Complete and review all remaining IPR sections manually.",) if self.settings.manual_review_only else ()
-                summary = ReviewSummary(child.display, document_path.name, len(fields), len(verification), warnings)
+                summary = ReviewSummary(child.display, document_name, len(fields), len(verification), warnings)
                 if self.settings.manual_review_only:
                     self._advance(State.MANUAL_REVIEW, "Partial transfer verified. Complete and review all remaining sections in the browser. Press Stop when finished.")
                     self.on_review(summary)

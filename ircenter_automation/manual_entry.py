@@ -1,9 +1,8 @@
 """Prepare a small, local copy guide for the supported school IPR layout."""
 
 from dataclasses import dataclass
-from pathlib import Path
-
-from .documents import find_document, parse_document
+from .documents import parse_document
+from .document_source import open_document
 from .errors import DocumentParsingError
 from .normalization import comparison_key, parse_child_name, resolve_two_word_name
 from .settings import Settings
@@ -33,16 +32,17 @@ _EXACT_FIELDS = (
 )
 
 
-def prepare_manual_entry(settings: Settings, raw_name: str) -> ManualEntryGuide:
+def prepare_manual_entry(settings: Settings, raw_name: str, class_name: str = "") -> ManualEntryGuide:
     entered = parse_child_name(raw_name)
-    path: Path = find_document(settings.docx_folder, entered, settings.filename_patterns)
-    parsed = parse_document(path)
-    if parsed.template != "school_ipr_2026":
-        raise DocumentParsingError("Manual entry guide supports only the 11-section school IPR DOCX")
-    child = resolve_two_word_name(entered, parsed.fields[comparison_key("docx_child_full_name")])
-    fields = tuple(
-        ManualField(label, portal_name, parsed.fields[comparison_key(portal_name)])
-        for label, portal_name in _EXACT_FIELDS
-    )
-    base = {field.portal_name: field.value for field in fields}
-    return ManualEntryGuide(child.display, path.name, fields, extract_portal_fields(path, base))
+    with open_document(settings, entered, class_name) as source:
+        parsed = parse_document(source.path)
+        if parsed.template != "school_ipr_2026":
+            raise DocumentParsingError("Manual entry guide supports only the 11-section school IPR DOCX")
+        child = resolve_two_word_name(entered, parsed.fields[comparison_key("docx_child_full_name")])
+        fields = tuple(
+            ManualField(label, portal_name, parsed.fields[comparison_key(portal_name)])
+            for label, portal_name in _EXACT_FIELDS
+        )
+        base = {field.portal_name: field.value for field in fields}
+        return ManualEntryGuide(child.display, source.name, fields,
+                                extract_portal_fields(source.path, base))

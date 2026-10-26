@@ -31,6 +31,7 @@ def main() -> int:
         if not (installed_root / "chrome_extension" / "manifest.json").is_file():
             raise RuntimeError("Chrome extension files are missing")
         from docx import Document  # noqa: F401 - verify packaged dependency
+        import gdown  # noqa: F401 - verify packaged Google Drive dependency
         from playwright.sync_api import sync_playwright
         if getattr(sys, "frozen", False):
             with sync_playwright() as playwright:

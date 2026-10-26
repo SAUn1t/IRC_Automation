@@ -25,12 +25,23 @@ class Settings:
     manual_review_only: bool
     selectors: dict[str, str]
     mapping_file: Path
+    document_source: str = "local"
+    drive_folder_url: str = ""
 
 
 def load_settings(path: Path) -> Settings:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         folder = Path(data["docx_folder"]).expanduser()
+        document_source = data.get("document_source", "local")
+        if document_source not in ("local", "drive"):
+            raise ValueError("document_source must be local or drive")
+        drive_folder_url = data.get("drive_folder_url", "")
+        if not isinstance(drive_folder_url, str):
+            raise ValueError("drive_folder_url must be a Google Drive folder link")
+        if drive_folder_url.strip():
+            from .document_source import drive_folder_id
+            drive_folder_id(drive_folder_url)
         profile = Path(data["browser_profile"]).expanduser()
         mapping = Path(data["mapping_file"]).expanduser()
         if not mapping.is_absolute():
@@ -80,6 +91,7 @@ def load_settings(path: Path) -> Settings:
             raise ValueError("manual_review_only must be true or false")
         return Settings(folder, patterns, url, browser, browser_transport, extension_token,
                         executable, headless, profile, timeout,
-                        review, auto, data["dry_run"], manual_review_only, dict(data["selectors"]), mapping)
+                        review, auto, data["dry_run"], manual_review_only, dict(data["selectors"]), mapping,
+                        document_source, drive_folder_url.strip())
     except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ConfigurationError(f"Invalid settings file: {exc}") from exc
