@@ -76,6 +76,8 @@ The journal accepts next-page links using either `?page=2` or `/page/2`. The ext
 
 When a mapped dropdown differs from the portal, the app reports the field name, option count, and whether case, spacing, or a leading checkbox mark explains the mismatch. For a subject adaptation error such as `5[29][2]`, share that diagnostic, the redacted DOCX subject row, and the portal select element's outerHTML. The diagnostic omits document field values.
 
+The subject adaptation dropdown records only `Адаптація` or `Модифікація`. A DOCX cell that explicitly describes adaptation and says modification is not used maps to `Адаптація`; the longer explanation still needs manual review in the IPR. Ambiguous descriptions stop for review.
+
 If the portal shows Cloudflare “Performing security verification” in a Playwright launch mode, the app waits for the journal and does not reload the page when you press **Continue after login**. If the check loops while your ordinary Chrome works, select **Chrome extension (existing profile)**. **Chrome normal window** is a separate profile controlled through remote debugging; Google may reject sign-in there. The app does not override the portal's security check.
 
 If the check works in your normal browser but keeps looping in the app browser, press **Stop** in the app. Enter the child's two-word name and click **Copy fields for normal browser**. This reads the DOCX locally, confirms the child's name, and offers copy buttons for the four exact fields. Open the matching child's **Створити ІПР** form in your normal browser, paste each value into its labeled field, and review all remaining sections before using **Сформувати документ**. The copy guide does not connect to the portal or submit anything.

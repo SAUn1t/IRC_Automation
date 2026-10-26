@@ -50,6 +50,19 @@ _ASSESSMENT_ROWS = (
 )
 
 
+def _subject_choice(value: str) -> str:
+    choice = comparison_key(value.lstrip("+\uf07f☐□☑☒•●· ").strip())
+    if choice == "адаптація":
+        return "Адаптація"
+    if choice == "модифікація":
+        return "Модифікація"
+    first_sentence = choice.split(".", 1)[0]
+    if (first_sentence.startswith("адаптація ") and "не застосовується" not in first_sentence
+            and re.search(r"\bмодифікаці\w*[^.]{0,200}\bне застосовується\.?$", choice)):
+        return "Адаптація"
+    return value
+
+
 def _selection(text: str) -> tuple[bool, str] | None:
     value = normalize_space(text)
     label = value.lstrip("+\uf07f☐□☑☒ ")
@@ -187,11 +200,7 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                 continue
             for column, (value, kind) in enumerate(zip(values, kinds), 1):
                 if section == "5" and column == 2:
-                    choice = comparison_key(value.lstrip("+\uf07f☐□☑☒•●· ").strip())
-                    if choice == "адаптація":
-                        value = "Адаптація"
-                    elif choice == "модифікація":
-                        value = "Модифікація"
+                    value = _subject_choice(value)
                 add(f"{section}[{index}][{column}]", value, kind)
 
     section8 = _section(paragraphs, 8)

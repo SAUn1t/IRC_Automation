@@ -1,4 +1,4 @@
 """Local, conservative IR Center form automation."""
 
-__version__ = "1.0.12"
+__version__ = "1.0.13"
 EXTENSION_VERSION = "1.3.3"

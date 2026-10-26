@@ -1,5 +1,6 @@
 """Run the exact-field workflow inside the user's already signed-in Chrome."""
 
+import re
 import time
 from threading import Event
 from typing import Callable
@@ -28,6 +29,9 @@ class ExtensionWorkflow:
             "Review every filled field and complete any missing IPR sections manually.",
             "Section 9 was skipped; check the portal's default before generating.",
         ]
+        if any(re.fullmatch(r"5\[(?:29|[3-9]\d+)\]\[2\]", field.name)
+               for field in guide.portal_fields):
+            warnings.append("Review subject adaptation details; the portal dropdown stores only Adaptation or Modification.")
         summary = ReviewSummary(
             guide.child_name, guide.document_name, field_count, field_count,
             tuple(warnings),

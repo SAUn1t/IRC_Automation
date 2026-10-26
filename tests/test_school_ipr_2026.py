@@ -38,7 +38,11 @@ def test_extracts_matching_sections_and_skips_section9(tmp_path: Path, section9_
         doc.add_paragraph(text)
     subjects = doc.add_table(rows=1, cols=3)
     subjects.rows[0].cells[0].text = "Найменування навчального предмета"
-    for name, adaptation in (("Математика", "адаптація"), ("Читання", "+ Модифікація")):
+    for name, adaptation in (
+        ("Математика", "Адаптація форми усної відповіді за потреби; додатковий час. "
+         "Модифікація змісту й очікуваних результатів не застосовується."),
+        ("Читання", "+ Модифікація"),
+    ):
         cells = subjects.add_row().cells
         cells[0].text, cells[1].text, cells[2].text = name, adaptation, "Учитель Приклад"
     goals = doc.add_table(rows=1, cols=5)
@@ -64,6 +68,13 @@ def test_extracts_matching_sections_and_skips_section9(tmp_path: Path, section9_
     assert result["8[9][0]"] == "false"
     assert "9[1][1]" not in result
     assert result["footer_parents_names"] == "Шевченко Олена Іванівна"
+
+
+def test_subject_choice_does_not_guess_when_both_methods_are_used():
+    from ircenter_automation.school_ipr_2026 import _subject_choice
+
+    value = "Адаптація усної відповіді. Модифікація змісту застосовується."
+    assert _subject_choice(value) == value
 
 
 @pytest.mark.parametrize("markers, expected", [

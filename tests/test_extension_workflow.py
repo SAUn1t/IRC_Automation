@@ -41,8 +41,10 @@ def test_extension_workflow_waits_for_installed_extension_and_stops_for_review(m
 
 def test_extension_review_mentions_skipped_section9(monkeypatch):
     settings = load_settings(Path("config/settings.example.json"))
-    guide = ManualEntryGuide("Іван Шевченко", "synthetic.docx", (),
-                             (PortalField("execution_period", "з 01.09.2026 по 31.05.2027", "text"),))
+    guide = ManualEntryGuide("Іван Шевченко", "synthetic.docx", (), (
+        PortalField("execution_period", "з 01.09.2026 по 31.05.2027", "text"),
+        PortalField("5[29][2]", "Адаптація", "select"),
+    ))
     monkeypatch.setattr(module, "prepare_manual_entry", lambda *_: guide)
 
     class FakeBridge:
@@ -62,3 +64,4 @@ def test_extension_review_mentions_skipped_section9(monkeypatch):
     reviews = []
     module.ExtensionWorkflow(settings, lambda _: None, reviews.append, Event()).run("Шевченко Іван")
     assert any("Section 9 was skipped" in warning for warning in reviews[0].warnings)
+    assert any("Review subject adaptation details" in warning for warning in reviews[0].warnings)
