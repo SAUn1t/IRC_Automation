@@ -50,7 +50,6 @@ def _parse_school_ipr_2026(doc) -> ParsedDocument:
     paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
     labels = {
         "execution_period": "1. Період виконання ",
-        "parents_phones": "контактні номери телефонів батьків (інших законних представників) учня ",
     }
     fields: dict[str, str] = {}
     for key, prefix in labels.items():
@@ -64,6 +63,13 @@ def _parse_school_ipr_2026(doc) -> ParsedDocument:
         if len(matches) != 1 or not matches[0]:
             raise DocumentParsingError(f"Required school IPR field is missing or ambiguous: {key}")
         fields[comparison_key(key)] = matches[0]
+    phones = [match.group(1).strip() for value in paragraphs
+              if (match := re.fullmatch(
+                  r"контактні номери телефонів батьків \(інших законних представників\) "
+                  r"(?:учня|учениці)(?:\s*:\s*|\s+)(.+)", value, re.IGNORECASE))]
+    if len(phones) != 1 or not phones[0]:
+        raise DocumentParsingError("Required school IPR field is missing or ambiguous: parents_phones")
+    fields[comparison_key("parents_phones")] = phones[0]
     child_names = [name for value in paragraphs if (name := labeled_school_full_name(value)) is not None]
     if len(child_names) != 1:
         raise DocumentParsingError("School IPR child name is missing or ambiguous")

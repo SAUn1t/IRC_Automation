@@ -129,6 +129,27 @@ def test_school_ipr_extracts_only_exact_scalar_counterparts(
     assert len(parsed.fields) == 5  # Four transferable fields plus the child identity guard.
 
 
+def test_school_ipr_reads_underlined_phone_after_uchenytsi_colon(tmp_path: Path):
+    path = tmp_path / "synthetic.docx"
+    doc = Document()
+    for line in (
+        "1. Період виконання з 01.09.2026 по 31.05.2027",
+        "прізвище, власне ім’я, по батькові Шевченко Олена Петрівна",
+        "Клас навчання: 6-А",
+        "Рік навчання: 4-й",
+    ):
+        doc.add_paragraph(line)
+    phone = doc.add_paragraph("Контактні номери телефонів батьків (інших законних представників) учениці: ")
+    phone.add_run("+380(00-000-00-00)").underline = True
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища, зокрема:")
+    doc.add_paragraph("11. Погодження індивідуальної програми розвитку з батьками")
+    doc.save(path)
+    parsed = parse_document(path)
+    assert parsed.fields["child_grade"] == "6-А"
+    assert parsed.fields["year_of_study"] == "4"
+    assert parsed.fields["parents_phones"] == "+380(00-000-00-00)"
+
+
 def test_mapping_missing_required_and_invalid_date():
     spec = FieldSpec("birth", "Дата народження", "#birth", "date", True, {}, None, None, "input")
     with pytest.raises(DocumentParsingError):
