@@ -34,7 +34,7 @@ def parse_child_name(raw: str) -> ChildName:
 
 
 _SCHOOL_NAME_LABEL = re.compile(
-    r"^прізвище,\s*власне ім[’ʼ']я,\s*по батькові\s*\(за наявності\)\s+(.+)$",
+    r"^прізвище,\s*власне ім[’ʼ']я,\s*по батькові(?:\s*\(за наявності\))?\s+(.+)$",
     re.IGNORECASE,
 )
 

@@ -44,8 +44,12 @@ def test_school_name_resolves_either_two_word_order_from_labeled_full_name(tmp_p
     for label in (
         "прізвище, власне ім’я, по батькові(за наявності) ",
         "прізвище, власне ім’я, по батькові (за наявності) ",
+        "прізвище, власне ім’я, по батькові\u00a0",
     ):
         assert labeled_school_full_name(label + full_name) == full_name
+    assert labeled_school_full_name(
+        "прізвище, власне ім’я, по батькові батьків Шевченко Олена Іванівна"
+    ) is None
     for entered in ("Шевченко Іван", "Іван Шевченко"):
         assert resolve_two_word_name(parse_child_name(entered), full_name).display == "Іван Шевченко"
     with pytest.raises(ChildIdentityMismatch):
@@ -92,7 +96,7 @@ def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path):
     doc = Document()
     for line in (
         "1. Період виконання з 01.09.2026 по 31.05.2027",
-        "прізвище, власне ім’я, по батькові(за наявності) Шевченко Іван Петрович",
+        "прізвище, власне ім’я, по батькові\u00a0Шевченко Іван Петрович",
         "контактні номери телефонів батьків (інших законних представників) учня 000 000 000",
         "клас навчання 2-А", "рік навчання 2",
         "5. Створення інклюзивного освітнього середовища, зокрема:",
