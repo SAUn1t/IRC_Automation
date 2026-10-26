@@ -91,20 +91,30 @@ def test_docx_duplicate_and_malformed_stop(tmp_path: Path):
         parse_document(corrupt)
 
 
-@pytest.mark.parametrize("class_line", (
-    "клас навчання 2-А",
-    "Клас навчання 2-А",
-    "Клас навчання: 2-А",
-    "Клас навчання:2-А",
+@pytest.mark.parametrize("class_line, expected_grade", (
+    ("клас навчання 2-А", "2-А"),
+    ("Клас навчання 2-А", "2-А"),
+    ("Клас навчання: 2-А", "2-А"),
+    ("Клас навчання:2-А", "2-А"),
+    ("Клас навчання: 6-А", "6-А"),
 ))
-def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path, class_line: str):
+@pytest.mark.parametrize("year_line, expected_year", (
+    ("рік навчання 2", "2"),
+    ("Рік навчання 2", "2"),
+    ("Рік навчання: 2", "2"),
+    ("Рік навчання:2", "2"),
+    ("Рік навчання: 4-й", "4"),
+))
+def test_school_ipr_extracts_only_exact_scalar_counterparts(
+    tmp_path: Path, class_line: str, expected_grade: str, year_line: str, expected_year: str,
+):
     path = tmp_path / "synthetic.docx"
     doc = Document()
     for line in (
         "1. Період виконання з 01.09.2026 по 31.05.2027",
         "прізвище, власне ім’я, по батькові\u00a0Шевченко Іван Петрович",
         "контактні номери телефонів батьків (інших законних представників) учня 000 000 000",
-        class_line, "рік навчання 2",
+        class_line, year_line,
         "5. Створення інклюзивного освітнього середовища, зокрема:",
         "11. Погодження індивідуальної програми розвитку з батьками",
     ):
@@ -114,8 +124,8 @@ def test_school_ipr_extracts_only_exact_scalar_counterparts(tmp_path: Path, clas
     parsed = parse_document(path)
     assert parsed.template == "school_ipr_2026"
     assert parsed.fields["execution_period"] == "з 01.09.2026 по 31.05.2027"
-    assert parsed.fields["child_grade"] == "2-А"
-    assert parsed.fields["year_of_study"] == "2"
+    assert parsed.fields["child_grade"] == expected_grade
+    assert parsed.fields["year_of_study"] == expected_year
     assert len(parsed.fields) == 5  # Four transferable fields plus the child identity guard.
 
 

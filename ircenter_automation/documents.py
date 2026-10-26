@@ -50,7 +50,6 @@ def _parse_school_ipr_2026(doc) -> ParsedDocument:
     paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
     labels = {
         "execution_period": "1. Період виконання ",
-        "year_of_study": "рік навчання ",
         "parents_phones": "контактні номери телефонів батьків (інших законних представників) учня ",
     }
     fields: dict[str, str] = {}
@@ -59,17 +58,21 @@ def _parse_school_ipr_2026(doc) -> ParsedDocument:
         if len(matches) != 1 or not matches[0]:
             raise DocumentParsingError(f"Required school IPR field is missing or ambiguous: {key}")
         fields[comparison_key(key)] = matches[0]
-    grades = [match.group(1).strip() for value in paragraphs
-              if (match := re.fullmatch(r"клас навчання(?:\s*:\s*|\s+)(.+)", value, re.IGNORECASE))]
-    if len(grades) != 1 or not grades[0]:
-        raise DocumentParsingError("Required school IPR field is missing or ambiguous: child_grade")
-    fields[comparison_key("child_grade")] = grades[0]
+    for key, label in (("child_grade", "клас навчання"), ("year_of_study", "рік навчання")):
+        matches = [match.group(1).strip() for value in paragraphs
+                   if (match := re.fullmatch(rf"{label}(?:\s*:\s*|\s+)(.+)", value, re.IGNORECASE))]
+        if len(matches) != 1 or not matches[0]:
+            raise DocumentParsingError(f"Required school IPR field is missing or ambiguous: {key}")
+        fields[comparison_key(key)] = matches[0]
     child_names = [name for value in paragraphs if (name := labeled_school_full_name(value)) is not None]
     if len(child_names) != 1:
         raise DocumentParsingError("School IPR child name is missing or ambiguous")
     fields[comparison_key("docx_child_full_name")] = child_names[0]
-    if not fields[comparison_key("year_of_study")].isdigit() or not 1 <= int(fields[comparison_key("year_of_study")]) <= 12:
+    year = re.fullmatch(r"(\d{1,2})(?:\s*[-‑–]\s*(?:й|ий|ій))?",
+                        fields[comparison_key("year_of_study")], re.IGNORECASE)
+    if not year or not 1 <= int(year.group(1)) <= 12:
         raise DocumentParsingError("School IPR year of study is invalid")
+    fields[comparison_key("year_of_study")] = str(int(year.group(1)))
     return ParsedDocument(fields, (), "school_ipr_2026")
 
 
