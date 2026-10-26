@@ -59,6 +59,15 @@ def _selection(text: str) -> tuple[bool, str] | None:
     return None
 
 
+def _assessment_choice(text: str) -> tuple[bool, str]:
+    """In section 8, a bullet or an unmarked list item means unchecked."""
+    selected = _selection(text)
+    if selected is not None:
+        return selected
+    value = normalize_space(text)
+    return False, value.lstrip("•●· ").strip()
+
+
 def _section(paragraphs: list[str], number: int) -> list[str]:
     starts = [i for i, text in enumerate(paragraphs) if re.match(rf"^{number}\.\s", text)]
     if len(starts) != 1:
@@ -181,11 +190,15 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                 add(f"{section}[{index}][{column}]", value, kind)
 
     section8 = _section(paragraphs, 8)
-    choices8 = [choice for text in section8[1:] if (choice := _selection(text)) is not None]
+    choices8 = [_assessment_choice(text) for text in section8[1:] if text]
     if choices8:
-        if len(choices8) < 8 or any(not comparison_key(choices8[i][1]).startswith(comparison_key(label))
-                                   for i, label in enumerate(_ASSESSMENT_ROWS)):
-            raise DocumentParsingError("School IPR assessment choices changed")
+        if len(choices8) < len(_ASSESSMENT_ROWS):
+            raise DocumentParsingError(
+                f"School IPR section 8 has {len(choices8)} choices; expected {len(_ASSESSMENT_ROWS)}"
+            )
+        for index, label in enumerate(_ASSESSMENT_ROWS):
+            if not comparison_key(choices8[index][1]).startswith(comparison_key(label)):
+                raise DocumentParsingError(f"School IPR section 8 choice {index + 1} has an unexpected label")
         for i, (checked, _) in enumerate(choices8[:8], 1):
             add(f"8[{i}][1]", "true" if checked else "false", "checkbox")
         if len(choices8) >= 9 and comparison_key(choices8[8][1]).startswith("інше"):

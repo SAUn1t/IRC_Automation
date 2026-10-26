@@ -61,3 +61,27 @@ def test_extracts_matching_sections_and_skips_section9(tmp_path: Path, section9_
     assert result["8[9][0]"] == "false"
     assert "9[1][1]" not in result
     assert result["footer_parents_names"] == "Шевченко Олена Іванівна"
+
+
+@pytest.mark.parametrize("unchecked_marker", ["• ", ""])
+def test_assessment_bullets_and_unmarked_list_items_are_unchecked(tmp_path: Path, unchecked_marker):
+    doc = Document()
+    doc.add_paragraph("8. Особливості процесу оцінювання:")
+    labels = (
+        "спрощення інструкцій", "гнучкість використання часу",
+        "зменшення кількості завдань", "використання оптимальних форм оцінювання",
+        "використання доступних форм викладу інформації",
+        "використання допоміжних засобів", "уникнення графічних завдань",
+        "уникнення зорових/слухових подразників",
+    )
+    for index, label in enumerate(labels):
+        doc.add_paragraph(("+ " if index < 5 else unchecked_marker) + label)
+    doc.add_paragraph(unchecked_marker + "інше __________________")
+    doc.add_paragraph("9. Потреба у продовженні строків навчання:")
+    path = tmp_path / "assessment.docx"
+    doc.save(path)
+    base = {"execution_period": "з 01.09.2026 по 31.05.2027", "year_of_study": "2",
+            "child_grade": "2-А", "parents_phones": "000 000 000"}
+    result = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert [result[f"8[{index}][1]"] for index in range(1, 9)] == ["true"] * 5 + ["false"] * 3
+    assert result["8[9][0]"] == "false"

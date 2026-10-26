@@ -8,6 +8,8 @@ The app recognizes the supplied 11-section school IPR DOCX and the matching curr
 
 Section 9 (extension of study) is skipped during automatic filling, even when the DOCX has a marked Yes/No answer. Review that portal choice manually before generating the document.
 
+In section 8, `+` marks a selected assessment choice. A bullet dot, empty box, or unmarked list item is treated as unchecked. The app still checks the eight choice labels before filling them.
+
 The conclusions journal has a 10-column table: the name link is in column 2 and the IPR action is in column 8. The separate “Пошук висновку” page requires a birth date, certificate number, and CAPTCHA, so the app uses the authenticated journal instead. It scans every journal page (up to a 100-page safety limit), requires exactly one first-name and surname match, opens that row's IPR page, and confirms the name again. On the IPR page it accepts either the top “Створити ІПР” link or the plus icon in column 5 of the IPR table. It stops if both are shown, if multiple plus icons are shown, or if the create link belongs to another conclusion. The example config includes the observed navigation, form identity, and “Сформувати документ” selectors. Success and validation selectors remain placeholders for any future fully automated submission mode.
 
 ## Architecture
