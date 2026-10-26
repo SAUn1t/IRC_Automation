@@ -24,9 +24,10 @@ class ExtensionWorkflow:
     def run(self, raw_name: str, class_name: str = "") -> str:
         guide = prepare_manual_entry(self.settings, raw_name, class_name)
         field_count = len(guide.portal_fields or guide.fields)
-        warnings = ["Review every filled field and complete any missing IPR sections manually."]
-        if guide.portal_fields and not any(field.name == "9[1][1]" for field in guide.portal_fields):
-            warnings.append("Section 9 has no selected DOCX answer; check the portal's default before generating.")
+        warnings = [
+            "Review every filled field and complete any missing IPR sections manually.",
+            "Section 9 was skipped; check the portal's default before generating.",
+        ]
         summary = ReviewSummary(
             guide.child_name, guide.document_name, field_count, field_count,
             tuple(warnings),

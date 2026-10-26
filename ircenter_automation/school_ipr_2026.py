@@ -198,13 +198,6 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                     add("8[9][0]", "true", "checkbox")
                     add("8[9][1]", detail, "textarea")
 
-    section9 = _section(paragraphs, 9)
-    choices9 = [choice for text in section9[1:] if (choice := _selection(text)) is not None]
-    if len(choices9) == 2 and sum(checked for checked, _ in choices9) == 1:
-        chosen = next(value for checked, value in choices9 if checked)
-        if comparison_key(chosen) in ("так", "ні"):
-            add("9[1][1]", "1" if comparison_key(chosen) == "так" else "0", "radio")
-
     signer = (_unique_suffix(paragraphs, "Я,") or "").rstrip(" ,.;")
     parents = next((text for text in paragraphs if text.startswith("прізвище, власне ім’я, по батькові (за наявності) батьків")), "")
     if signer and comparison_key(signer) in comparison_key(parents):

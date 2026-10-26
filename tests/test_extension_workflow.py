@@ -3,6 +3,7 @@ from threading import Event
 
 import ircenter_automation.extension_workflow as module
 from ircenter_automation.manual_entry import ManualEntryGuide, ManualField
+from ircenter_automation.school_ipr_2026 import PortalField
 from ircenter_automation.settings import load_settings
 
 
@@ -36,3 +37,28 @@ def test_extension_workflow_waits_for_installed_extension_and_stops_for_review(m
     assert result.startswith("MANUAL REVIEW")
     assert reviews[0].child_name == "Іван Шевченко"
     assert reviews[0].verified == 4
+
+
+def test_extension_review_mentions_skipped_section9(monkeypatch):
+    settings = load_settings(Path("config/settings.example.json"))
+    guide = ManualEntryGuide("Іван Шевченко", "synthetic.docx", (),
+                             (PortalField("execution_period", "з 01.09.2026 по 31.05.2027", "text"),))
+    monkeypatch.setattr(module, "prepare_manual_entry", lambda *_: guide)
+
+    class FakeBridge:
+        def __init__(self, _token, _guide):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            pass
+
+        def next_status(self):
+            return "ready", "Ready"
+
+    monkeypatch.setattr(module, "ExtensionBridge", FakeBridge)
+    reviews = []
+    module.ExtensionWorkflow(settings, lambda _: None, reviews.append, Event()).run("Шевченко Іван")
+    assert any("Section 9 was skipped" in warning for warning in reviews[0].warnings)

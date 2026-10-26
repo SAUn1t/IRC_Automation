@@ -14,10 +14,10 @@ The teacher DOCX and the observed **“Створення ІПР для ЗЗСО
 | §6 goals and expected results | `6[1+]` | Add rows and fill populated columns |
 | §7 additional lessons and services | `7[1+]` | Add rows and fill populated columns |
 | §8 assessment choices | `8[1]`–`8[9]` | Check or uncheck each explicit DOCX choice |
-| §9 extension of study | `9[1][1]` | Set only when exactly one choice is marked |
+| §9 extension of study | `9[1][1]` | Skipped for now; review the portal's default manually |
 | §10 team members | `10[1+]` | Add rows and fill named columns |
 | §11 parent agreement | `footer_parents_names` | Fill only when the signer matches a listed parent |
 
-For the supplied example, the local extractor finds **123 populated controls**. This counts individual inputs, including table cells. Blank and unclear DOCX entries are left for review. The extension validates control type, available select value, and labeled adaptation row before filling, then reads back the edited values. It leaves the form open for review and does not press **Сформувати документ**.
+The local extractor counts individual inputs, including table cells. Blank and unclear DOCX entries are left for review. The extension validates control type, available select value, and labeled adaptation row before filling, then reads back the edited values. It leaves the form open for review and does not press **Сформувати документ**.
 
 The **Copy fields for normal browser** fallback remains a four-field copy guide. The wider mapping is used by the paired Chrome extension and in the local preview count.

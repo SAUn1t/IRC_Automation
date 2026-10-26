@@ -2,12 +2,18 @@
 
 from pathlib import Path
 
+import pytest
 from docx import Document
 
 from ircenter_automation.school_ipr_2026 import extract_portal_fields
 
 
-def test_extracts_matching_sections_and_leaves_unselected_choice_for_review(tmp_path: Path):
+@pytest.mark.parametrize("section9_choices", [
+    (" Так", " Ні"),
+    ("+ Так", " Ні"),
+    (" Так", "+ Ні"),
+])
+def test_extracts_matching_sections_and_skips_section9(tmp_path: Path, section9_choices):
     doc = Document()
     for text in (
         "3. Категорії (типи) особливих освітніх потреб: мовленнєві труднощі",
@@ -25,7 +31,7 @@ def test_extracts_matching_sections_and_leaves_unselected_choice_for_review(tmp_
         "+ використання доступних форм викладу інформації", "+ використання допоміжних засобів",
         " уникнення графічних завдань", " уникнення зорових/слухових подразників",
         " інше __________________",
-        "9. Потреба у продовженні строків навчання:", " Так", " Ні",
+        "9. Потреба у продовженні строків навчання:", *section9_choices,
         "прізвище, власне ім’я, по батькові (за наявності) батьків (інших законних представників) учня Шевченко Олена Іванівна",
         "Я, Шевченко Олена Іванівна,",
     ):
