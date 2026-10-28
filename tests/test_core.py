@@ -177,3 +177,33 @@ def test_partial_real_site_selectors_cannot_start_automation():
     settings = json.loads(Path("config/settings.example.json").read_text(encoding="utf-8"))
     with pytest.raises(ConfigurationError, match="success_indicator"):
         require_selectors(settings["selectors"])
+
+
+def test_appendix_three_filename_matches_exact_pupil(tmp_path: Path):
+    path = tmp_path / "ІПР (Додаток 3)_Забашта Поліна.docx"
+    path.touch()
+    patterns = ("{Surname} {Name}.docx", "{Name} {Surname}.docx")
+    assert find_document(tmp_path, parse_child_name("Поліна Забашта"), patterns) == path
+    with pytest.raises(DocumentNotFound):
+        find_document(tmp_path, parse_child_name("Інша Забашта"), patterns)
+
+
+def test_school_ipr_split_patronymic_and_ordinal_year(tmp_path: Path):
+    doc = Document()
+    for line in (
+        "1. Період виконання 01.09.2026-28.05.2027",
+        "прізвище, власне ім’я, по батькові (за наявності) Забашта Поліна",
+        "Євгенівна",
+        "контактні номери телефонів батьків (інших законних представників) учня 0000000000",
+        "клас навчання 7-Б",
+        "рік навчання другий",
+        "5. Створення інклюзивного освітнього середовища, зокрема:",
+        "11. Погодження індивідуальної програми розвитку з батьками",
+    ):
+        doc.add_paragraph(line)
+    path = tmp_path / "split.docx"
+    doc.save(path)
+    parsed = parse_document(path)
+    assert parsed.fields["docx_child_full_name"] == "Забашта Поліна Євгенівна"
+    assert parsed.fields["year_of_study"] == "2"
+    assert parsed.fields["child_grade"] == "7-Б"
