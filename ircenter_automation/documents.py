@@ -18,7 +18,16 @@ def find_document(folder: Path, child: ChildName, patterns: tuple[str, ...]) -> 
     names = {comparison_key(pattern.format(Name=first, Surname=surname))
              for pattern in patterns
              for first, surname in ((child.first, child.surname), (child.surname, child.first))}
-    matches = sorted((p for p in folder.iterdir() if p.is_file() and p.suffix.casefold() == ".docx" and comparison_key(p.name) in names), key=lambda p: p.name)
+    # School-issued files often have an official appendix prefix before the name.
+    # Strip only this known prefix, and still require an exact configured name.
+    appendix = re.compile(r"^іпр\s*\(\s*додаток\s*3\s*\)\s*[_ -]+", re.IGNORECASE)
+    def matches_name(filename: str) -> bool:
+        key = comparison_key(filename)
+        return key in names or appendix.sub("", key) in names
+
+    matches = sorted((p for p in folder.iterdir()
+                      if p.is_file() and p.suffix.casefold() == ".docx"
+                      and matches_name(p.name)), key=lambda p: p.name)
     if not matches:
         raise DocumentNotFound("No exact DOCX filename match")
     if len(matches) > 1:
@@ -64,12 +73,32 @@ def _parse_school_ipr_2026(doc) -> ParsedDocument:
     if len(phones) != 1 or not phones[0]:
         raise DocumentParsingError("Required school IPR field is missing or ambiguous: parents_phones")
     fields[comparison_key("parents_phones")] = phones[0]
-    child_names = [name for value in paragraphs if (name := labeled_school_full_name(value)) is not None]
+    # Some school templates put the patronymic in the following Word paragraph.
+    # Join only a single short continuation; never join arbitrary adjacent fields.
+    child_names = []
+    for index, value in enumerate(paragraphs):
+        name = labeled_school_full_name(value)
+        if name is None and index + 1 < len(paragraphs):
+            continuation = paragraphs[index + 1]
+            if len(continuation.split()) == 1 and continuation.isalpha():
+                name = labeled_school_full_name(f"{value} {continuation}")
+        if name is not None:
+            child_names.append(name)
     if len(child_names) != 1:
         raise DocumentParsingError("School IPR child name is missing or ambiguous")
     fields[comparison_key("docx_child_full_name")] = child_names[0]
+    year_text = comparison_key(fields[comparison_key("year_of_study")])
+    ordinal_years = {
+        "перший": 1, "другий": 2, "третій": 3, "четвертий": 4,
+        "п’ятий": 5, "п'ятий": 5, "шостий": 6, "сьомий": 7,
+        "восьмий": 8, "дев’ятий": 9, "дев'ятий": 9,
+        "десятий": 10, "одинадцятий": 11, "дванадцятий": 12,
+    }
+    if year_text in ordinal_years:
+        fields[comparison_key("year_of_study")] = str(ordinal_years[year_text])
+        return ParsedDocument(fields, (), "school_ipr_2026")
     year = re.fullmatch(r"(\d{1,2})(?:\s*[-‑–]\s*(?:й|ий|ій))?",
-                        fields[comparison_key("year_of_study")], re.IGNORECASE)
+                        year_text, re.IGNORECASE)
     if not year or not 1 <= int(year.group(1)) <= 12:
         raise DocumentParsingError("School IPR year of study is invalid")
     fields[comparison_key("year_of_study")] = str(int(year.group(1)))
