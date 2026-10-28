@@ -18,7 +18,16 @@ def find_document(folder: Path, child: ChildName, patterns: tuple[str, ...]) -> 
     names = {comparison_key(pattern.format(Name=first, Surname=surname))
              for pattern in patterns
              for first, surname in ((child.first, child.surname), (child.surname, child.first))}
-    matches = sorted((p for p in folder.iterdir() if p.is_file() and p.suffix.casefold() == ".docx" and comparison_key(p.name) in names), key=lambda p: p.name)
+    # School-issued files often have an official appendix prefix before the name.
+    # Strip only this known prefix, and still require an exact configured name.
+    appendix = re.compile(r"^іпр\s*\(\s*додаток\s*3\s*\)\s*[_ -]+", re.IGNORECASE)
+    def matches_name(filename: str) -> bool:
+        key = comparison_key(filename)
+        return key in names or appendix.sub("", key) in names
+
+    matches = sorted((p for p in folder.iterdir()
+                      if p.is_file() and p.suffix.casefold() == ".docx"
+                      and matches_name(p.name)), key=lambda p: p.name)
     if not matches:
         raise DocumentNotFound("No exact DOCX filename match")
     if len(matches) > 1:
