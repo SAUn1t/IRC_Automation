@@ -232,23 +232,32 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
     for first_header, section, base_row, kinds in tables:
         matches = [table for table in body_tables if table.rows and
                    comparison_key(table.cell(0, 0).text).startswith(comparison_key(first_header))]
-        if len(matches) > 1:
+        # Word may split the team roster into several top-level tables,
+        # each repeating the same header. Treat these as continuation tables.
+        if len(matches) > 1 and section != "10":
             raise DocumentParsingError(f"Duplicate school IPR table in section {section}")
         if not matches:
             continue
-        table = matches[0]
         index = base_row
-        for row in table.rows[1:]:
-            values = [normalize_space(cell.text) for cell in row.cells]
-            if len(values) < len(kinds):
+        for table in matches:
+            if len(table.columns) < len(kinds):
                 raise DocumentParsingError(f"School IPR section {section} has too few columns")
-            if not values[0] or (section == "6" and not any(values[1:4])):
-                continue
-            for column, (value, kind) in enumerate(zip(values, kinds), 1):
-                if section == "5" and column == 2:
-                    value = _subject_choice(value)
-                add(f"{section}[{index}][{column}]", value, kind)
-            index += 1
+            for row in table.rows[1:]:
+                values = [normalize_space(cell.text) for cell in row.cells]
+                if len(values) < len(kinds):
+                    raise DocumentParsingError(f"School IPR section {section} has too few columns")
+                if not values[0] or (section == "6" and not any(values[1:4])):
+                    continue
+                # Repeated headings sometimes occur in the body of a split table.
+                if (section == "10" and
+                        comparison_key(values[0]).startswith(comparison_key(first_header)) and
+                        comparison_key(values[1]).startswith(comparison_key("Найменування посади"))):
+                    continue
+                for column, (value, kind) in enumerate(zip(values, kinds), 1):
+                    if section == "5" and column == 2:
+                        value = _subject_choice(value)
+                    add(f"{section}[{index}][{column}]", value, kind)
+                index += 1
 
     section8 = _section(paragraphs, 8)
     choices8 = []
