@@ -280,3 +280,42 @@ def test_assessment_bullets_and_mixed_plus_markers(tmp_path: Path, markers, expe
     result = {field.name: field.value for field in extract_portal_fields(path, base)}
     assert [result[f"8[{index}][1]"] for index in range(1, 9)] == expected
     assert result["8[9][0]"] == "false"
+
+
+def test_section_10_continues_across_multiple_word_tables(tmp_path: Path):
+    doc = Document()
+    for member, role in (("Перший Учитель", "Вчитель"), ("Другий Учитель", "Асистент")):
+        table = doc.add_table(rows=1, cols=2)
+        table.cell(0, 0).text = "Прізвище, власне ім’я, по батькові (за наявності)"
+        table.cell(0, 1).text = "Найменування посади"
+        row = table.add_row()
+        row.cells[0].text, row.cells[1].text = member, role
+    path = tmp_path / "split-team.docx"
+    doc.save(path)
+    base = {"execution_period": "01.09.2026-28.05.2027", "year_of_study": "2",
+            "child_grade": "7-Б", "parents_phones": "0000000000"}
+    fields = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert fields["10[1][1]"] == "Перший Учитель"
+    assert fields["10[1][2]"] == "Вчитель"
+    assert fields["10[2][1]"] == "Другий Учитель"
+    assert fields["10[2][2]"] == "Асистент"
+
+
+def test_section_10_skips_repeated_header_inside_continuation(tmp_path: Path):
+    doc = Document()
+    table = doc.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "Прізвище, власне ім’я, по батькові"
+    table.cell(0, 1).text = "Найменування посади"
+    repeated = table.add_row()
+    repeated.cells[0].text = "Прізвище, власне ім’я, по батькові"
+    repeated.cells[1].text = "Найменування посади"
+    member = table.add_row()
+    member.cells[0].text = "Третій Учитель"
+    member.cells[1].text = "Вчитель"
+    path = tmp_path / "repeated-team-header.docx"
+    doc.save(path)
+    base = {"execution_period": "01.09.2026-28.05.2027", "year_of_study": "2",
+            "child_grade": "7-Б", "parents_phones": "0000000000"}
+    fields = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert fields["10[1][1]"] == "Третій Учитель"
+    assert "10[2][1]" not in fields
