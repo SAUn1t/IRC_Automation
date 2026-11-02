@@ -24,8 +24,9 @@ def find_document(folder: Path, child: ChildName, patterns: tuple[str, ...]) -> 
     def matches_name(filename: str) -> bool:
         key = comparison_key(filename)
         # The full pupil identity is verified from DOCX before any portal work.
-        surname_ipr = comparison_key(f"{child.surname} ІПР.docx")
-        return key in names or appendix.sub("", key) in names or key == surname_ipr
+        surname_ipr_names = {comparison_key(f"{part} ІПР.docx")
+                             for part in (child.surname, child.first)}
+        return key in names or appendix.sub("", key) in names or key in surname_ipr_names
 
     matches = sorted((p for p in folder.iterdir()
                       if p.is_file() and p.suffix.casefold() == ".docx"
