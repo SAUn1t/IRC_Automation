@@ -44,7 +44,7 @@ def labeled_school_full_name(value: str) -> str | None:
     match = _SCHOOL_NAME_LABEL.fullmatch(normalize_space(value))
     if not match:
         return None
-    name = normalize_space(match.group(1))
+    # Word templates sometimes contain an extra closing bracket after the label.\n    name = normalize_space(match.group(1)).lstrip(") ").strip()
     return name if len(name.split(" ")) == 3 else None
 
 
