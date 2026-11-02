@@ -23,7 +23,9 @@ def find_document(folder: Path, child: ChildName, patterns: tuple[str, ...]) -> 
     appendix = re.compile(r"^іпр\s*\(\s*додаток\s*3\s*\)\s*[_ -]+", re.IGNORECASE)
     def matches_name(filename: str) -> bool:
         key = comparison_key(filename)
-        return key in names or appendix.sub("", key) in names
+        # The full pupil identity is verified from DOCX before any portal work.
+        surname_ipr = comparison_key(f"{child.surname} ІПР.docx")
+        return key in names or appendix.sub("", key) in names or key == surname_ipr
 
     matches = sorted((p for p in folder.iterdir()
                       if p.is_file() and p.suffix.casefold() == ".docx"
