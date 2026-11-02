@@ -68,11 +68,11 @@ def _subject_choice(value: str) -> str:
 
 def _selection(text: str) -> tuple[bool, str] | None:
     value = normalize_space(text)
-    label = value.lstrip("+\uf07f☐□☑☒ ")
+    label = value.lstrip("+\uf07f☐□☑☒◻🗹 ")
     markers = value[:len(value) - len(label)]
     if not markers.strip():
         return None
-    return "+" in markers or "☑" in markers or "☒" in markers, label.strip()
+    return any(mark in markers for mark in ("+", "☑", "☒", "🗹")), label.strip()
 
 
 def _underlined_choice(paragraph: Paragraph) -> bool:
@@ -117,6 +117,10 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
     """Return only DOCX values with the same meaning in the current 11-section form."""
     doc = Document(path)
     paragraphs = [normalize_space(p.text) for p in doc.paragraphs]
+    # Some school templates put multiple labels in one Word paragraph,
+    # separated by manual line breaks. Keep those boundaries for scalar fields.
+    scalar_lines = [normalize_space(line) for p in doc.paragraphs
+                    for line in p.text.splitlines() if normalize_space(line)]
     body_tables = _body_tables(doc)
     fields: list[PortalField] = []
     seen: set[str] = set()
@@ -137,11 +141,14 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
         ("parent_address", "адреса задекларованого/зареєстрованого місця проживання (перебування)", "textarea"),
         ("child_enrollment_date", "дата зарахування до закладу загальної середньої освіти", "text"),
     ):
-        add(name, _unique_suffix(paragraphs, prefix), kind)
+        add(name, _unique_suffix(scalar_lines, prefix), kind)
 
     section3 = _section(paragraphs, 3)
     if section3 and ":" in section3[0]:
-        add("3[1][1]", section3[0].split(":", 1)[1], "textarea")
+        # The diagnosis can follow the heading as a separate paragraph.
+        # Preserve all section 3 text up to section 4, without inventing values.
+        value = " ".join([section3[0].split(":", 1)[1], *section3[1:]]).strip()
+        add("3[1][1]", normalize_space(value), "textarea")
 
     section4 = _section(paragraphs, 4)
     if section4:
