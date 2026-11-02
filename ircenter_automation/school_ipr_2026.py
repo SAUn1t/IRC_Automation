@@ -255,6 +255,9 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
                     raise DocumentParsingError(f"School IPR section {section} has too few columns")
                 if not values[0] or (section == "6" and not any(values[1:4])):
                     continue
+                # A merged informational service note is not a scheduled class.
+                if section == "7" and len(set(values[:4])) == 1:
+                    continue
                 # Repeated headings sometimes occur in the body of a split table.
                 if (section == "10" and
                         comparison_key(values[0]).startswith(comparison_key(first_header)) and
