@@ -357,3 +357,42 @@ def test_school_ipr_multiline_address_diagnosis_and_emoji_checkboxes(tmp_path: P
     assert fields["5[26][1]"] == "0"
     assert fields["5[27][1]"] == "за розкладом класу"
     assert fields["5[28][1]"] == "0"
+
+
+def test_school_ipr_merged_service_note_is_not_repeated_as_four_fields(tmp_path: Path):
+    doc = Document()
+    table = doc.add_table(rows=1, cols=4)
+    table.cell(0, 0).text = "Найменування заняття (послуги)"
+    table.cell(0, 1).text = "Прізвище, власне ім’я, по батькові фахівця"
+    table.cell(0, 2).text = "День проведення"
+    table.cell(0, 3).text = "Час проведення"
+    row = table.add_row()
+    merged = row.cells[0].merge(row.cells[3])
+    merged.text = "Послуги надаються фахівцями ІРЦ"
+    path = tmp_path / "note.docx"
+    doc.save(path)
+    base = {"execution_period": "01.09.2026-28.05.2027", "year_of_study": "9",
+            "child_grade": "9-Б", "parents_phones": "0000000000"}
+    fields = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert not any(key.startswith("7[") for key in fields)
+
+
+def test_school_ipr_protocol_with_kpps_abbreviation(tmp_path: Path):
+    doc = Document()
+    doc.add_paragraph(
+        "4. Рівень підтримки, визначений командою (протокол засідання КППС "
+        "від 23 вересня 2026 р. №1):"
+    )
+    for label in ("перший", "другий", "третій", "четвертий", "п’ятий"):
+        doc.add_paragraph(label + " рівень підтримки")
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища:")
+    path = tmp_path / "protocol.docx"
+    doc.save(path)
+    base = {"execution_period": "01.09.2026-28.05.2027", "year_of_study": "9",
+            "child_grade": "9-Б", "parents_phones": "0000000000"}
+    fields = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert fields["protocol_date"] == "23"
+    assert fields["protocol_month"] == "вересня"
+    assert fields["protocol_year"] == "26"
+    assert fields["protocol_number"] == "1"
+    assert "supportLevel" not in fields
