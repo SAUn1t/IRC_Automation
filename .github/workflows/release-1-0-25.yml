@@ -82,4 +82,5 @@ jobs:
           tag_name: v1.0.25
           target_commitish: ${{ github.sha }}
           generate_release_notes: true
-\n# Retry after correcting pupil-name parser regression.\n
+
+# Retry after correcting pupil-name parser regression.
