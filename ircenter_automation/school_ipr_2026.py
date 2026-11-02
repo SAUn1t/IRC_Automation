@@ -152,7 +152,7 @@ def extract_portal_fields(path: Path, base: dict[str, str]) -> tuple[PortalField
 
     section4 = _section(paragraphs, 4)
     if section4:
-        match = re.search(r"протокол засідання від\s+(\d{1,2})\s+([а-щьюяіїєґ]+)\s+(20\d{2})\s*р\.\s*№\s*(\d+)", section4[0], re.I)
+        match = re.search(r"протокол засідання(?: КППС)? від\s+(\d{1,2})\s+([а-щьюяіїєґ]+)\s+(20\d{2})\s*р\.\s*№\s*(\d+)", section4[0], re.I)
         if match:
             day, month, year, number = match.groups()
             add("protocol_date", day, "number")
