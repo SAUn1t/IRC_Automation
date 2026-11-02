@@ -319,3 +319,41 @@ def test_section_10_skips_repeated_header_inside_continuation(tmp_path: Path):
     fields = {field.name: field.value for field in extract_portal_fields(path, base)}
     assert fields["10[1][1]"] == "Третій Учитель"
     assert "10[2][1]" not in fields
+
+
+def test_school_ipr_multiline_address_diagnosis_and_emoji_checkboxes(tmp_path: Path):
+    """Regression for school IPRs using manual line breaks and 🗹 / ◻ boxes."""
+    doc = Document()
+    doc.add_paragraph(
+        "Адреса задекларованого/зареєстрованого місця проживання (перебування): "
+        "вул. Прикладна, 12\\n"
+        "Повне найменування закладу загальної середньої освіти, в якому навчається учень: Ліцей № 1"
+    )
+    doc.add_paragraph("Дата зарахування до закладу загальної середньої освіти: 01.09.2025")
+    doc.add_paragraph("3. Категорії (типи) особливих освітніх потреб:")
+    doc.add_paragraph("Труднощі четвертого ступеня")
+    doc.add_paragraph("4. Рівень підтримки:")
+    for label in ("перший", "другий", "третій", "четвертий", "п’ятий"):
+        doc.add_paragraph("◻ " + label + " рівень підтримки")
+    doc.add_paragraph("5. Створення інклюзивного освітнього середовища")
+    doc.add_paragraph("Наявність індивідуального навчального плану:")
+    doc.add_paragraph("◻ так")
+    doc.add_paragraph("🗹 ні")
+    doc.add_paragraph("Здійснення освітнього процесу:")
+    doc.add_paragraph("🗹 за розкладом класу")
+    doc.add_paragraph("◻ за адаптованим розкладом")
+    doc.add_paragraph("Забезпечення допоміжними засобами для навчання:")
+    doc.add_paragraph("◻ так")
+    doc.add_paragraph("🗹 ні")
+    path = tmp_path / "school-layout.docx"
+    doc.save(path)
+    base = {"execution_period": "01.09.2026-28.05.2027", "year_of_study": "9",
+            "child_grade": "9-А", "parents_phones": "0000000000"}
+    fields = {field.name: field.value for field in extract_portal_fields(path, base)}
+    assert fields["parent_address"] == "вул. Прикладна, 12"
+    assert fields["child_enrollment_date"] == "01.09.2025"
+    assert fields["3[1][1]"] == "Труднощі четвертого ступеня"
+    assert "supportLevel" not in fields  # No level is checked.
+    assert fields["5[26][1]"] == "0"
+    assert fields["5[27][1]"] == "за розкладом класу"
+    assert fields["5[28][1]"] == "0"
