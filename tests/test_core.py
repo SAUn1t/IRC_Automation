@@ -207,3 +207,17 @@ def test_school_ipr_split_patronymic_and_ordinal_year(tmp_path: Path):
     assert parsed.fields["docx_child_full_name"] == "Забашта Поліна Євгенівна"
     assert parsed.fields["year_of_study"] == "2"
     assert parsed.fields["child_grade"] == "7-Б"
+
+
+def test_surname_ipr_school_filename_still_requires_identity_check(tmp_path: Path):
+    file = tmp_path / "Приклад ІПР.docx"
+    file.touch()
+    patterns = ("{Surname} {Name}.docx", "{Name} {Surname}.docx")
+    for entered in ("Левон Приклад", "Приклад Левон"):
+        assert find_document(tmp_path, parse_child_name(entered), patterns) == file
+    assert labeled_school_full_name(
+        "Прізвище, власне ім’я, по батькові (за наявності): ) Приклад Левон Айкович"
+    ) == "Приклад Левон Айкович"
+    assert resolve_two_word_name(
+        parse_child_name("Левон Приклад"), "Приклад Левон Айкович"
+    ).display == "Левон Приклад"
